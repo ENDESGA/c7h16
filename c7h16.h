@@ -374,7 +374,7 @@ fn vec vec_len( vec v ) {
 }
 
 fn vec vec_norm( vec v ) {
-	out vec_div_f32(v, vec_len(v));
+	out vec_div(v, vec_len(v));
 }
 
 fn vec vec_norm_fast( vec v ) {
@@ -521,7 +521,7 @@ fn dual_quat_proj dual_quat_proj_set( quat dir, vec pos, f32 fov, f32 aspect, f3
 	f32 f, d;
 	f = 1.0f / tanf( fov * 0.5f );
 	d = 1.0f / ( near - far );
-	out new_dual_quat_proj( dual_quat_set( dir, pos ), $make_vec4_struct( f / aspect, f, ( near + far ) * d, 2.0f * near * far * d ));
+	out new_dual_quat_proj( new_dual_quat( dir, pos ), $make_vec4_struct( f / aspect, f, ( near + far ) * d, 2.0f * near * far * d ));
 }
 
 //
