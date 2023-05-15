@@ -29,6 +29,9 @@
 #if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ )
 	#undef OS_WINDOWS
 	#define OS_WINDOWS 1
+    #include <Windows.h>
+#undef near
+#undef far
 	#include <intrin.h>
 #elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 	#undef OS_LINUX
@@ -226,7 +229,7 @@ make_union{
 
 make_type(safe s8) spinlock;
 
-#define spinlock_engage( lock ) spin(safe_s8_set( lock, 1)) {SDL_CPUPauseInstruction();}
+#define spinlock_engage( lock ) spin(safe_s8_set( lock, 1)) // {SDL_CPUPauseInstruction();}
 #define spinlock_vacate( lock ) safe_s8_set( lock, 0 )
 
 //
@@ -722,7 +725,7 @@ str dec_to_str[] = {
 #define stb_inline inline
 #define STB_NOTUSED(v)  (void)(v)
 
-#define STB_ASSERT(x) SDL_assert(x)
+#define STB_ASSERT(x) //SDL_assert(x)
 #define STB_MALLOC(sz)           malloc(sz)
 #define STB_REALLOC(p,newsz)     realloc(p,newsz)
 #define STB_REALLOC_SIZED(p,oldsz,newsz) STB_REALLOC(p,newsz)
