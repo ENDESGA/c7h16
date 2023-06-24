@@ -8,219 +8,298 @@
 
 #pragma once
 #ifndef C7H16_H
-	#define C7H16_H
+#define C7H16_H
 
-	#include <float.h>
-	#include <math.h>
-	#include <stdint.h>
-	#include <stdio.h>
-	#include <stdlib.h>
-	#include <string.h>
+#include <float.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-	#define OS_LINUX 0
-	#define OS_WINDOWS 0
-	#define OS_MACOS 0
-	#define OS_OTHER 0
+#define OS_LINUX 0
+#define OS_WINDOWS 0
+#define OS_MACOS 0
+#define OS_OTHER 0
 
-	#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ )
-		#undef OS_WINDOWS
-		#define OS_WINDOWS 1
-		#define FARPROC WINDOWS_FARPROC
-		#include <windows.h>
-		#undef FARPROC
-		#undef near
-		#undef far
-		#include <intrin.h>
-	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
-		#undef OS_LINUX
-		#define OS_LINUX 1
-		#include <immintrin.h>
-		#include <X11/Xlib.h>
-		#include <X11/keysym.h>
-	#elif defined( __MACOSX__ ) || defined( __APPLE__ )
-		#undef OS_MACOS
-		#define OS_MACOS 1
-	#else
-		#undef OS_OTHER
-		#define OS_OTHER 1
-	#endif
+#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ )
+#undef OS_WINDOWS
+#define OS_WINDOWS 1
+#define FARPROC WINDOWS_FARPROC
+#include <windows.h>
+#undef FARPROC
+#undef near
+#undef far
+#include <intrin.h>
+#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
+#undef OS_LINUX
+#define OS_LINUX 1
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <immintrin.h>
+#elif defined( __MACOSX__ ) || defined( __APPLE__ )
+#undef OS_MACOS
+#define OS_MACOS 1
+#else
+#undef OS_OTHER
+#define OS_OTHER 1
+#endif
 
-	#if defined( _MSC_VER )
-		#define COMPILER_MSVC
-	#elif defined( __GNUC__ )
-		#define COMPILER_GCC
-		#include <stdatomic.h>
-	#else
-		#error "Unsupported compiler"
-	#endif
+#if defined( _MSC_VER )
+#define COMPILER_MSVC
+#elif defined( __GNUC__ )
+#define COMPILER_GCC
+#include <stdatomic.h>
+#else
+#error "Unsupported compiler"
+#endif
 
 //
 
-	#define CAT_LINE_SET( a, line ) $##a##_##line
-	#define CAT_LINE( a, line ) CAT_LINE_SET( a, line )
-	#define VAR_LINE( name ) CAT_LINE( name, __LINE__ )
+#define CAT_LINE_SET( a, line ) $##a##_##line
+#define CAT_LINE( a, line ) CAT_LINE_SET( a, line )
+#define VAR_LINE( name ) CAT_LINE( name, __LINE__ )
 
-	#define DEF_START \
-		do              \
+#define DEF_START \
+	do              \
 		{
-	#define DEF_END \
-		}             \
-		spin( 0 )
+#define DEF_END \
+	}             \
+	spin( 0 )
 
 //
 
-	#define once static
-	#define safe volatile
-	#define global safe once
+#define once static
+#define safe volatile
+#define global safe once
 
-	#define make_type( _ ) typedef _
-	#define make_ptr( _ ) make_type( ptr( _ ) )
-	#define make_struct make_type( struct )
-	#define make_enum make_type( enum )
-	#define make_union make_type( union )
+#define make_type( _ ) typedef _
+#define make_ptr( _ ) make_type( ptr( _ ) )
+#define make_struct make_type( struct )
+#define make_enum make_type( enum )
+#define make_union make_type( union )
 
-	#define ptr( _ ) _*
-	#define val( _ ) *_
-	#define ref( _ ) _&
-	#define adr( _ ) &_
+#define ptr( _ ) _*
+#define val( _ ) *_
+#define ref( _ ) _&
+#define adr( _ ) &_
+
+#define fn once inline
+#define in const
+#define out return
+
+#define fn_ptr( _ ) pure( val( _ ) )()
+#define fn_ptr_param1( _, _1 ) pure( val( _ ) )( _1 )
+#define fn_ptr_param2( _, _1, _2 ) pure( val( _ ) )( _1, _2 )
+#define fn_ptr_param3( _, _1, _2, _3 ) pure( val( _ ) )( _1, _2, _3 )
+#define fn_ptr_param4( _, _1, _2, _3, _4 ) pure( val( _ ) )( _1, _2, _3, _4 )
 
 //
 
-	#define cast( type, _ ) val( ( ( ptr( type ) )( adr( _ ) ) ) )
+#undef abs
+#define abs( _ ) ( ( ( _ ) < 0 ) ? -( _ ) : ( _ ) )
+#undef min
+#define min( a, b ) ( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
+#undef max
+#define max( a, b ) ( ( ( a ) > ( b ) ) ? ( a ) : ( b ) )
+#undef sign
+#define sign( _ ) ( ( _ ) < 0 ? -1 : ( ( _ ) > 0 ? 1 : 0 ) )
+#undef avg
+#define avg( a, b ) ( ( ( a ) + ( b ) ) / 2. )
+
+#define size_( _ ) sizeof( _ )
+#define print printf
+#define println() print( "\n" )
+
+#define new_mem( type, n ) ( ( ptr( type ) )calloc( n, size_( type ) ) )
+#define free_mem( _ ) free( _ )
+
+//
+
+#define not !
+#define and &&
+#define or ||
+
+#define ifn( _ ) if( !( _ ) )
+#define elif( _ ) else if( _ )
+
+#define with( _ ) switch( _ )
+#define is( _ ) case _:
+#define skip break
+
+#define spin( _ ) while( _ )
+#define loop spin( 1 )
+#define do_once              \
+	once u8 VAR_LINE( o ) = 1; \
+	if( ( VAR_LINE( o ) == 1 ? VAR_LINE( o )-- : 0 ) )
+#define iter( to_n, var )                 \
+	register s32 VAR_LINE( to ) = ( to_n ); \
+	if( VAR_LINE( to ) )                    \
+		for( register s32 var = 0; var < VAR_LINE( to ); var++ )
+#define rep( to_n ) iter( to_n, VAR_LINE( r ) )
+
+//
+
+#define null NULL
+#define true ( bool( 1 ) )
+#define false ( bool( 0 ) )
+#define pi 3.14159265358979
+#define pi_mul2 6.28318530717959
+#define pi_mul3 9.42477796076937
+#define pi_mul4 12.56637061435917
+#define pi_mul8 25.13274122871834
+#define pi_div2 1.57079632679489
+#define pi_div3 1.04719755119659
+#define pi_div4 0.78539816339744
+#define pi_div8 0.39269908169872
+#define pi_pow2 9.86960440108935
+#define pi_pow3 31.00627668029982
+#define pi_pow4 97.40909103400243
+#define pi_pow8 9488.53101607057401
+#define euler 2.71828182845904
+#define e_mul2 5.43656365691809
+
+//
+
+#define cast( type, _ ) val( ( ( ptr( type ) )( adr( _ ) ) ) )
 
 make_type( void ) pure;
-	#define pure( _ ) ( ( pure )( _ ) )
-	#define size_pure sizeof( pure )
+#define pure( _ ) ( ( pure )( _ ) )
+#define size_pure size_( pure )
 make_type( ptr( void ) ) pure_ptr;
-	#define pure_ptr( _ ) ( ( pure_ptr )( _ ) )
-	#define size_pure_ptr sizeof( pure_ptr )
+#define pure_ptr( _ ) ( ( pure_ptr )( _ ) )
+#define size_pure_ptr size_( pure_ptr )
 
 make_type( unsigned char ) u8;
-	#define u8( _ ) ( ( u8 )( _ ) )
-	#define size_u8 ( sizeof( u8 ) )
-	#define u8_min ( 0 )
-	#define u8_max ( UINT8_MAX )
-	#define print_u8( _ ) print( "%hhu", u8( _ ) )
+#define u8( _ ) ( ( u8 )( _ ) )
+#define size_u8 ( size_( u8 ) )
+#define u8_min ( 0 )
+#define u8_max ( UINT8_MAX )
+#define print_u8( _ ) print( "%hhu", u8( _ ) )
 
 make_type( unsigned short ) u16;
-	#define u16( _ ) ( ( u16 )( _ ) )
-	#define size_u16 ( sizeof( u16 ) )
-	#define u16_min ( 0 )
-	#define u16_max ( UINT16_MAX )
-	#define print_u16( _ ) print( "%hu", u16( _ ) )
+#define u16( _ ) ( ( u16 )( _ ) )
+#define size_u16 ( size_( u16 ) )
+#define u16_min ( 0 )
+#define u16_max ( UINT16_MAX )
+#define print_u16( _ ) print( "%hu", u16( _ ) )
 
 make_type( unsigned int ) u32;
-	#define u32( _ ) ( ( u32 )( _ ) )
-	#define size_u32 ( sizeof( u32 ) )
-	#define u32_min ( 0 )
-	#define u32_max ( UINT32_MAX )
-	#define print_u32( _ ) print( "%u", u32( _ ) )
+#define u32( _ ) ( ( u32 )( _ ) )
+#define size_u32 ( size_( u32 ) )
+#define u32_min ( 0 )
+#define u32_max ( UINT32_MAX )
+#define print_u32( _ ) print( "%u", u32( _ ) )
 
 make_type( unsigned long long int ) u64;
-	#define u64( _ ) ( ( u64 )( _ ) )
-	#define size_u64 ( sizeof( u64 ) )
-	#define u64_min ( 0 )
-	#define u64_max ( UINT64_MAX )
-	#define print_u64( _ ) print( "%llu", u64( _ ) )
+#define u64( _ ) ( ( u64 )( _ ) )
+#define size_u64 ( size_( u64 ) )
+#define u64_min ( 0 )
+#define u64_max ( UINT64_MAX )
+#define print_u64( _ ) print( "%llu", u64( _ ) )
 
 make_type( unsigned char ) bool;
-	#define bool( _ ) ( !!( _ ) )
-	#define size_bool ( sizeof( bool ) )
-	#define bool_min ( 0 )
-	#define bool_max ( 1 )
-	#define print_bool( _ ) print( "%hhu", bool( _ ) )
+#define bool( _ ) ( !!( _ ) )
+#define size_bool ( size_( bool ) )
+#define bool_min ( 0 )
+#define bool_max ( 1 )
+#define print_bool( _ ) print( "%hhu", bool( _ ) )
 
 make_type( char ) s8;
-	#define s8( _ ) ( ( s8 )( _ ) )
-	#define size_s8 ( sizeof( s8 ) )
-	#define s8_min ( INT8_MIN )
-	#define s8_max ( INT8_MAX )
-	#define print_s8( _ ) print( "%hhd", s8( _ ) )
+#define s8( _ ) ( ( s8 )( _ ) )
+#define size_s8 ( size_( s8 ) )
+#define s8_min ( INT8_MIN )
+#define s8_max ( INT8_MAX )
+#define print_s8( _ ) print( "%hhd", s8( _ ) )
 
 make_type( short ) s16;
-	#define s16( _ ) ( ( s16 )( _ ) )
-	#define size_s16 ( sizeof( s16 ) )
-	#define s16_min ( INT16_MIN )
-	#define s16_max ( INT16_MAX )
-	#define print_s16( _ ) print( "%hd", s16( _ ) )
+#define s16( _ ) ( ( s16 )( _ ) )
+#define size_s16 ( size_( s16 ) )
+#define s16_min ( INT16_MIN )
+#define s16_max ( INT16_MAX )
+#define print_s16( _ ) print( "%hd", s16( _ ) )
 
 make_type( int ) s32;
-	#define s32( _ ) ( ( s32 )( _ ) )
-	#define size_s32 ( sizeof( s32 ) )
-	#define s32_min ( INT32_MIN )
-	#define s32_max ( INT32_MAX )
-	#define print_s32( _ ) print( "%d", s32( _ ) )
+#define s32( _ ) ( ( s32 )( _ ) )
+#define size_s32 ( size_( s32 ) )
+#define s32_min ( INT32_MIN )
+#define s32_max ( INT32_MAX )
+#define print_s32( _ ) print( "%d", s32( _ ) )
 
 make_type( long long int ) s64;
-	#define s64( _ ) ( ( s64 )( _ ) )
-	#define size_s64 ( sizeof( s64 ) )
-	#define s64_min ( INT64_MIN )
-	#define s64_max ( INT64_MAX )
-	#define print_s64( _ ) print( "%lld", s64( _ ) )
+#define s64( _ ) ( ( s64 )( _ ) )
+#define size_s64 ( size_( s64 ) )
+#define s64_min ( INT64_MIN )
+#define s64_max ( INT64_MAX )
+#define print_s64( _ ) print( "%lld", s64( _ ) )
 
 make_type( float ) f32;
-	#define f32( _ ) ( ( f32 )( _ ) )
-	#define size_f32 ( sizeof( f32 ) )
-	#define f32_min ( FLT_MIN )
-	#define f32_max ( FLT_MAX )
-	#define print_f32( _ ) print( "%f", f32( _ ) )
+#define f32( _ ) ( ( f32 )( _ ) )
+#define size_f32 ( size_( f32 ) )
+#define f32_min ( FLT_MIN )
+#define f32_max ( FLT_MAX )
+#define print_f32( _ ) print( "%f", f32( _ ) )
 
 make_type( long double ) f64;
-	#define f64( _ ) ( ( f64 )( _ ) )
-	#define size_f64 ( sizeof( f64 ) )
-	#define f64_min ( DBL_MIN )
-	#define f64_max ( DBL_MAX )
-	#define print_f64( _ ) print( "%lf", f64( _ ) )
+#define f64( _ ) ( ( f64 )( _ ) )
+#define size_f64 ( size_( f64 ) )
+#define f64_min ( DBL_MIN )
+#define f64_max ( DBL_MAX )
+#define print_f64( _ ) print( "%lf", f64( _ ) )
 
 make_type( ptr( s8 ) ) str;
-	#define str( _ ) ( ( str )( _ ) )
-	#define size_str ( sizeof( str ) )
-	#define new_str( default_str, extra_char_mem ) memcpy( new_mem( s8, strlen( default_str ) + ( extra_char_mem ) + 1 ), default_str, strlen( default_str ) )
-	#define str_len( str_to_get_length ) strlen( str_to_get_length )
-	#define str_add( str_base, str_to_add ) strcat_s( str_base, str_len( str_base ) + str_len( str_to_add ) + 1, str_to_add )
-	#define str_end( str_base ) str_add( str_base, "\0" )
-	#define delete_str( str_to_delete ) \
-		if( str_to_delete == null ) free( str_to_delete )
-	#define print_str( _ ) print( "%s", str( _ ) )
-
-	//
-
-	// set
-	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_set( safe_ptr, set_value ) _InterlockedExchange8( ( safe ptr( s8 ) )( safe_ptr ), ( s8 )( set_value ) )
-		#define safe_s16_ptr_set( safe_ptr, set_value ) _InterlockedExchange16( ( safe ptr( s16 ) )( safe_ptr ), ( s16 )( set_value ) )
-		#define safe_s32_ptr_set( safe_ptr, set_value ) _InterlockedExchange( ( safe ptr( long ) )( safe_ptr ), ( long )( set_value ) )
-		#define safe_s64_ptr_set( safe_ptr, set_value ) _InterlockedExchange64( ( safe ptr( s64 ) )( safe_ptr ), ( s64 )( set_value ) )
-	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s16_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s32_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s64_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-	#endif
-
-	// get
-	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_get( safe_ptr ) _InterlockedOr8( ( safe ptr( s8 ) )( safe_ptr ), 0 )
-		#define safe_s16_ptr_get( safe_ptr ) _InterlockedOr16( ( safe ptr( s16 ) )( safe_ptr ), 0 )
-		#define safe_s32_ptr_get( safe_ptr ) _InterlockedOr( ( safe ptr( long ) )( safe_ptr ), 0 )
-		#define safe_s64_ptr_get( safe_ptr ) _InterlockedOr64( ( safe ptr( s64 ) )( safe_ptr ), 0 )
-	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s16_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s32_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s64_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-	#endif
+#define str( _ ) ( ( str )( _ ) )
+#define size_str ( size_( str ) )
+#define new_str( default_str, extra_char_mem ) memcpy( new_mem( s8, strlen( default_str ) + ( extra_char_mem ) + 1 ), default_str, strlen( default_str ) )
+#define str_len( str_to_get_length ) strlen( str_to_get_length )
+#define str_add( str_base, str_to_add ) strcat_s( str_base, str_len( str_base ) + str_len( str_to_add ) + 1, str_to_add )
+#define str_end( str_base ) str_add( str_base, "\0" )
+#define delete_str( str_to_delete ) \
+	if( str_to_delete == null ) free( str_to_delete )
+#define print_str( _ ) print( "%s", str( _ ) )
 
 //
 
-	#define safe_s8_set( safe_var, set_value ) safe_s8_ptr_set( adr( safe_var ), set_value )
-	#define safe_s16_set( safe_var, set_value ) safe_s16_ptr_set( adr( safe_var ), set_value )
-	#define safe_s32_set( safe_var, set_value ) safe_s32_ptr_set( adr( safe_var ), set_value )
-	#define safe_s64_set( safe_var, set_value ) safe_s64_ptr_set( adr( safe_var ), set_value )
-	#define safe_s8_get( safe_var ) safe_s8_ptr_get( adr( safe_var ) )
-	#define safe_s16_get( safe_var ) safe_s16_ptr_get( adr( safe_var ) )
-	#define safe_s32_get( safe_var ) safe_s32_ptr_get( adr( safe_var ) )
-	#define safe_s64_get( safe_var ) safe_s64_ptr_get( adr( safe_var ) )
+str dec_to_str[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+
+//
+
+// set
+#ifdef COMPILER_MSVC
+#define safe_s8_ptr_set( safe_ptr, set_value ) _InterlockedExchange8( ( safe ptr( s8 ) )( safe_ptr ), ( s8 )( set_value ) )
+#define safe_s16_ptr_set( safe_ptr, set_value ) _InterlockedExchange16( ( safe ptr( s16 ) )( safe_ptr ), ( s16 )( set_value ) )
+#define safe_s32_ptr_set( safe_ptr, set_value ) _InterlockedExchange( ( safe ptr( long ) )( safe_ptr ), ( long )( set_value ) )
+#define safe_s64_ptr_set( safe_ptr, set_value ) _InterlockedExchange64( ( safe ptr( s64 ) )( safe_ptr ), ( s64 )( set_value ) )
+#elif defined( COMPILER_GCC )
+#define safe_s8_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
+#define safe_s16_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
+#define safe_s32_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
+#define safe_s64_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
+#endif
+
+// get
+#ifdef COMPILER_MSVC
+#define safe_s8_ptr_get( safe_ptr ) _InterlockedOr8( ( safe ptr( s8 ) )( safe_ptr ), 0 )
+#define safe_s16_ptr_get( safe_ptr ) _InterlockedOr16( ( safe ptr( s16 ) )( safe_ptr ), 0 )
+#define safe_s32_ptr_get( safe_ptr ) _InterlockedOr( ( safe ptr( long ) )( safe_ptr ), 0 )
+#define safe_s64_ptr_get( safe_ptr ) _InterlockedOr64( ( safe ptr( s64 ) )( safe_ptr ), 0 )
+#elif defined( COMPILER_GCC )
+#define safe_s8_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
+#define safe_s16_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
+#define safe_s32_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
+#define safe_s64_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
+#endif
+
+//
+
+#define safe_s8_set( safe_var, set_value ) safe_s8_ptr_set( adr( safe_var ), set_value )
+#define safe_s16_set( safe_var, set_value ) safe_s16_ptr_set( adr( safe_var ), set_value )
+#define safe_s32_set( safe_var, set_value ) safe_s32_ptr_set( adr( safe_var ), set_value )
+#define safe_s64_set( safe_var, set_value ) safe_s64_ptr_set( adr( safe_var ), set_value )
+#define safe_s8_get( safe_var ) safe_s8_ptr_get( adr( safe_var ) )
+#define safe_s16_get( safe_var ) safe_s16_ptr_get( adr( safe_var ) )
+#define safe_s32_get( safe_var ) safe_s32_ptr_get( adr( safe_var ) )
+#define safe_s64_get( safe_var ) safe_s64_ptr_get( adr( safe_var ) )
 
 //
 
@@ -255,145 +334,54 @@ make_union
 }
 safe_64;
 
-	// Macros for unsigned integers
-	#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, ( ( safe_8 ){ .u = set_value } ).s )
-	#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, ( ( safe_16 ){ .u = set_value } ).s )
-	#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, ( ( safe_32 ){ .u = set_value } ).s )
-	#define safe_u64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, ( ( safe_64 ){ .u = set_value } ).s )
+// Macros for unsigned integers
+#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, ( ( safe_8 ){ .u = set_value } ).s )
+#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, ( ( safe_16 ){ .u = set_value } ).s )
+#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, ( ( safe_32 ){ .u = set_value } ).s )
+#define safe_u64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, ( ( safe_64 ){ .u = set_value } ).s )
 
-	#define safe_u8_ptr_get( safe_ptr ) ( ( safe_8 ){ .s = safe_s8_ptr_get( safe_ptr ) } ).u
-	#define safe_u16_ptr_get( safe_ptr ) ( ( safe_16 ){ .s = safe_s16_ptr_get( safe_ptr ) } ).u
-	#define safe_u32_ptr_get( safe_ptr ) ( ( safe_32 ){ .s = safe_s32_ptr_get( safe_ptr ) } ).u
-	#define safe_u64_ptr_get( safe_ptr ) ( ( safe_64 ){ .s = safe_s64_ptr_get( safe_ptr ) } ).u
+#define safe_u8_ptr_get( safe_ptr ) ( ( safe_8 ){ .s = safe_s8_ptr_get( safe_ptr ) } ).u
+#define safe_u16_ptr_get( safe_ptr ) ( ( safe_16 ){ .s = safe_s16_ptr_get( safe_ptr ) } ).u
+#define safe_u32_ptr_get( safe_ptr ) ( ( safe_32 ){ .s = safe_s32_ptr_get( safe_ptr ) } ).u
+#define safe_u64_ptr_get( safe_ptr ) ( ( safe_64 ){ .s = safe_s64_ptr_get( safe_ptr ) } ).u
 
-	#define safe_u8_set( safe_var, set_value ) safe_s8_set( safe_var, ( ( safe_8 ){ .u = set_value } ).s )
-	#define safe_u16_set( safe_var, set_value ) safe_s16_set( safe_var, ( ( safe_16 ){ .u = set_value } ).s )
-	#define safe_u32_set( safe_var, set_value ) safe_s32_set( safe_var, ( ( safe_32 ){ .u = set_value } ).s )
-	#define safe_u64_set( safe_var, set_value ) safe_s64_set( safe_var, ( ( safe_64 ){ .u = set_value } ).s )
+#define safe_u8_set( safe_var, set_value ) safe_s8_set( safe_var, ( ( safe_8 ){ .u = set_value } ).s )
+#define safe_u16_set( safe_var, set_value ) safe_s16_set( safe_var, ( ( safe_16 ){ .u = set_value } ).s )
+#define safe_u32_set( safe_var, set_value ) safe_s32_set( safe_var, ( ( safe_32 ){ .u = set_value } ).s )
+#define safe_u64_set( safe_var, set_value ) safe_s64_set( safe_var, ( ( safe_64 ){ .u = set_value } ).s )
 
-	#define safe_u8_get( safe_var ) ( ( safe_8 ){ .s = safe_s8_get( safe_var ) } ).u
-	#define safe_u16_get( safe_var ) ( ( safe_16 ){ .s = safe_s16_get( safe_var ) } ).u
-	#define safe_u32_get( safe_var ) ( ( safe_32 ){ .s = safe_s32_get( safe_var ) } ).u
-	#define safe_u64_get( safe_var ) ( ( safe_64 ){ .s = safe_s64_get( safe_var ) } ).u
+#define safe_u8_get( safe_var ) ( ( safe_8 ){ .s = safe_s8_get( safe_var ) } ).u
+#define safe_u16_get( safe_var ) ( ( safe_16 ){ .s = safe_s16_get( safe_var ) } ).u
+#define safe_u32_get( safe_var ) ( ( safe_32 ){ .s = safe_s32_get( safe_var ) } ).u
+#define safe_u64_get( safe_var ) ( ( safe_64 ){ .s = safe_s64_get( safe_var ) } ).u
 
-	// Macros for floating point numbers
-	#define safe_f32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, ( ( safe_32 ){ .f = set_value } ).s )
-	#define safe_f64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, ( ( safe_64 ){ .f = set_value } ).s )
+// Macros for floating point numbers
+#define safe_f32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, ( ( safe_32 ){ .f = set_value } ).s )
+#define safe_f64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, ( ( safe_64 ){ .f = set_value } ).s )
 
-	#define safe_f32_ptr_get( safe_ptr ) ( ( safe_32 ){ .s = safe_s32_ptr_get( safe_ptr ) } ).f
-	#define safe_f64_ptr_get( safe_ptr ) ( ( safe_64 ){ .s = safe_s64_ptr_get( safe_ptr ) } ).f
+#define safe_f32_ptr_get( safe_ptr ) ( ( safe_32 ){ .s = safe_s32_ptr_get( safe_ptr ) } ).f
+#define safe_f64_ptr_get( safe_ptr ) ( ( safe_64 ){ .s = safe_s64_ptr_get( safe_ptr ) } ).f
 
-	#define safe_f32_set( safe_var, set_value ) safe_s32_set( safe_var, ( ( safe_32 ){ .f = set_value } ).s )
-	#define safe_f64_set( safe_var, set_value ) safe_s64_set( safe_var, ( ( safe_64 ){ .f = set_value } ).s )
+#define safe_f32_set( safe_var, set_value ) safe_s32_set( safe_var, ( ( safe_32 ){ .f = set_value } ).s )
+#define safe_f64_set( safe_var, set_value ) safe_s64_set( safe_var, ( ( safe_64 ){ .f = set_value } ).s )
 
-	#define safe_f32_get( safe_var ) ( ( safe_32 ){ .s = safe_s32_get( safe_var ) } ).f
-	#define safe_f64_get( safe_var ) ( ( safe_64 ){ .s = safe_s64_get( safe_var ) } ).f
+#define safe_f32_get( safe_var ) ( ( safe_32 ){ .s = safe_s32_get( safe_var ) } ).f
+#define safe_f64_get( safe_var ) ( ( safe_64 ){ .s = safe_s64_get( safe_var ) } ).f
 
-	// Macros for pointers
-	#define safe_ptr_set( safe_ptr, set_value ) safe_s64_set( safe_ptr, set_value )
-	#define safe_ptr_get( safe_ptr ) safe_s64_get( safe_ptr )
+// Macros for pointers
+#define safe_ptr_set( safe_ptr, set_value ) safe_s64_set( safe_ptr, set_value )
+#define safe_ptr_get( safe_ptr ) safe_s64_get( safe_ptr )
 
 // Spinlock type
 make_type( safe s8 ) spinlock;
 
-	// Spinlock macros
-	#define engage_spinlock( lock )              \
-		DEF_START                                  \
-		spin( ( safe_s8_set( lock, 1 ) ) == 1 ) {} \
-		DEF_END
+// Spinlock macros
+#define engage_spinlock( lock )              \
+	DEF_START                                  \
+	spin( ( safe_s8_set( lock, 1 ) ) == 1 ) {} \
+	DEF_END
 
-	#define vacate_spinlock( lock ) safe_s8_set( lock, 0 )
-
-//
-
-make_struct
-{
-	u8 r, g, b, a;
-}
-rgba;
-	#define rgba( _ ) ( ( rgba )( _ ) )
-	#define size_rgba ( sizeof( rgba ) )
-	#define make_rgba( r, g, b, a ) ( ( rgba ){ r, g, b, a } )
-
-//
-
-	#define fn once inline
-	#define in const
-	#define out return
-
-	#define fn_ptr( _ ) pure( val( _ ) )()
-	#define fn_ptr_param1( _, _1 ) pure( val( _ ) )( _1 )
-	#define fn_ptr_param2( _, _1, _2 ) pure( val( _ ) )( _1, _2 )
-	#define fn_ptr_param3( _, _1, _2, _3 ) pure( val( _ ) )( _1, _2, _3 )
-	#define fn_ptr_param4( _, _1, _2, _3, _4 ) pure( val( _ ) )( _1, _2, _3, _4 )
-
-//
-
-	#undef abs
-	#define abs( _ ) ( ( _ < 0 ) ? -( _ ) : ( _ ) )
-	#undef min
-	#define min( a, b ) ( ( a < b ) ? a : b )
-	#undef max
-	#define max( a, b ) ( ( a > b ) ? a : b )
-	#undef sign
-	#define sign( _ ) ( ( _ ) < 0 ? -1 : ( ( _ ) > 0 ? 1 : 0 ) )
-	#undef avg
-	#define avg( a, b ) ( ( ( a ) + ( b ) ) / 2. )
-
-	#define print printf
-	#define println() print( "\n" )
-
-	#define new_mem( type, n ) ( ( ptr( type ) )calloc( n, sizeof( type ) ) )
-	#define free_mem( _ ) free( _ )
-
-//
-
-	#define not !
-	#define and &&
-	#define or ||
-
-	#define ifn( _ ) if( !( _ ) )
-	#define elif( _ ) else if( _ )
-
-	#define with( _ ) switch( _ )
-	#define is( _ ) case _:
-	#define skip break
-
-	#define spin( _ ) while( _ )
-	#define loop spin( 1 )
-	#define do_once              \
-		once u8 VAR_LINE( o ) = 1; \
-		if( ( VAR_LINE( o ) == 1 ? VAR_LINE( o )-- : 0 ) )
-	#define iter( to_n, var )                 \
-		register s32 VAR_LINE( to ) = ( to_n ); \
-		if( VAR_LINE( to ) )                    \
-			for( register s32 var = 0; var < VAR_LINE( to ); var++ )
-	#define rep( to_n ) iter( to_n, VAR_LINE( r ) )
-
-//
-
-	#define null NULL
-	#define true ( bool( 1 ) )
-	#define false ( bool( 0 ) )
-	#define pi 3.14159265358979
-	#define pi_mul2 6.28318530717959
-	#define pi_mul3 9.42477796076937
-	#define pi_mul4 12.56637061435917
-	#define pi_mul8 25.13274122871834
-	#define pi_div2 1.57079632679489
-	#define pi_div3 1.04719755119659
-	#define pi_div4 0.78539816339744
-	#define pi_div8 0.39269908169872
-	#define pi_pow2 9.86960440108935
-	#define pi_pow3 31.00627668029982
-	#define pi_pow4 97.40909103400243
-	#define pi_pow8 9488.53101607057401
-	#define euler 2.71828182845904
-	#define e_mul2 5.43656365691809
-
-//
-
-str dec_to_str[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+#define vacate_spinlock( lock ) safe_s8_set( lock, 0 )
 
 //
 
@@ -417,75 +405,75 @@ fn list $new_list( in u32 in_size, in u32 in_size_mem, in u32 in_size_type, in p
 	//
 	out temp_list;
 }
-	#define new_list_data( type, size, data ) $new_list( size, max( 1, size ), sizeof( type ), pure_ptr( data ) )
-	#define new_list( type ) new_list_data( type, 0, new_mem( u8, sizeof( type ) ) )
+#define new_list_data( type, size, data ) $new_list( size, max( 1, size ), size_( type ), pure_ptr( data ) )
+#define new_list( type ) new_list_data( type, 0, new_mem( u8, size_( type ) ) )
 
-	#define lock_list( _ ) engage_spinlock( _->lock )
-	#define unlock_list( _ ) vacate_spinlock( _->lock )
+#define lock_list( _ ) engage_spinlock( _->lock )
+#define unlock_list( _ ) vacate_spinlock( _->lock )
 
-	#define list_alloc( _ )                                                                   \
-		DEF_START                                                                               \
-		if( _->size == _->size_mem )                                                            \
+#define list_alloc( _ )                                                                     \
+	DEF_START                                                                                 \
+	if( _->size == _->size_mem )                                                              \
 		{                                                                                       \
 			s32 temp_new_size_mem = ( s32 )( _->size_mem << 1 );                                  \
 			pure_ptr new_data = realloc( pure_ptr( _->data ), temp_new_size_mem * _->size_type ); \
 			if( new_data == null )                                                                \
-			{                                                                                     \
-				break;                                                                              \
-			}                                                                                     \
+				{                                                                                   \
+					break;                                                                            \
+				}                                                                                   \
 			_->size_mem = temp_new_size_mem;                                                      \
 			_->data = new_data;                                                                   \
 		}                                                                                       \
-		DEF_END
+	DEF_END
 
-	#define list_set( _, type, pos, val ) ( ( ptr( type ) )( _->data ) )[ pos ] = val
+#define list_set( _, type, pos, val ) ( ( ptr( type ) )( _->data ) )[ pos ] = val
 
-	#define list_add( _, type, val )       \
-		DEF_START                            \
-		list_alloc( _ );                     \
-		list_set( _, type, _->size++, val ); \
-		DEF_END
+#define list_add( _, type, val )       \
+	DEF_START                            \
+	list_alloc( _ );                     \
+	list_set( _, type, _->size++, val ); \
+	DEF_END
 
-	#define list_shift( _, n )                                      \
-		memmove( pure_ptr( _->data ),                                 \
-						 pure_ptr( _->data + ( ( -( n ) ) * _->size_type ) ), \
-						 ( ( _->size -= abs( n ) ) ) * _->size_type )
+#define list_shift( _, n )                                      \
+	memmove( pure_ptr( _->data ),                                 \
+					 pure_ptr( _->data + ( ( -( n ) ) * _->size_type ) ), \
+					 ( ( _->size -= abs( n ) ) ) * _->size_type )
 
-	#define list_move( _, start, length, n )                                   \
-		memmove( pure_ptr( _->data + ( ( ( start ) + ( n ) ) * _->size_type ) ), \
-						 pure_ptr( _->data + ( ( start )*_->size_type ) ),               \
-						 ( length )*_->size_type )
+#define list_move( _, start, length, n )                                   \
+	memmove( pure_ptr( _->data + ( ( ( start ) + ( n ) ) * _->size_type ) ), \
+					 pure_ptr( _->data + ( ( start )*_->size_type ) ),               \
+					 ( length )*_->size_type )
 
-	#define list_insert( _, type, pos, val )       \
-		DEF_START                                    \
-		list_alloc( _ );                             \
-		list_move( _, pos, _->size - pos, 1 );       \
-		( ( ptr( type ) )( _->data ) )[ pos ] = val; \
-		++( _ )->size;                               \
-		DEF_END
+#define list_insert( _, type, pos, val )       \
+	DEF_START                                    \
+	list_alloc( _ );                             \
+	list_move( _, pos, _->size - pos, 1 );       \
+	( ( ptr( type ) )( _->data ) )[ pos ] = val; \
+	++( _ )->size;                               \
+	DEF_END
 
-	#define list_delete( _, pos )                     \
-		DEF_START                                       \
-		list_move( _, pos + 1, _->size - pos - 1, -1 ); \
-		--( _ )->size;                                  \
-		DEF_END
+#define list_delete( _, pos )                     \
+	DEF_START                                       \
+	list_move( _, pos + 1, _->size - pos - 1, -1 ); \
+	--( _ )->size;                                  \
+	DEF_END
 
-	#define list_fill( _, val )              \
-		DEF_START                              \
-		iter( _->size, n ) _->data[ n ] = val; \
-		DEF_END
+#define list_fill( _, val )              \
+	DEF_START                              \
+	iter( _->size, n ) _->data[ n ] = val; \
+	DEF_END
 
-	#define list_free( _ )     \
-		free_mem( ( _ )->data ); \
-		free_mem( _ )
+#define list_free( _ )     \
+	free_mem( ( _ )->data ); \
+	free_mem( _ )
 
-	#define list_get( _, type, pos ) ( ( ptr( type ) )( _->data ) )[ pos ]
+#define list_get( _, type, pos ) ( ( ptr( type ) )( _->data ) )[ pos ]
 
-	#define list_pop_front( _, type ) \
-		list_get( _, type, 0 );         \
-		list_shift( _, -1 )
+#define list_pop_front( _, type ) \
+	list_get( _, type, 0 );         \
+	list_shift( _, -1 )
 
-	#define list_pop_back( _, type ) list_get( _, type, --( _->size ) )
+#define list_pop_back( _, type ) list_get( _, type, --( _->size ) )
 
 //
 
@@ -508,32 +496,146 @@ fn pool $new_pool( in list in_list )
 	//
 	out temp_pool;
 }
-	#define new_pool( type ) $new_pool( new_list( type ) )
+#define new_pool( type ) $new_pool( new_list( type ) )
 
-	#define lock_pool( _ ) engage_spinlock( _->lock )
-	#define unlock_pool( _ ) vacate_spinlock( _->lock )
+#define lock_pool( _ ) engage_spinlock( _->lock )
+#define unlock_pool( _ ) vacate_spinlock( _->lock )
 
-	#define pool_add( _, type, val )                  \
-		DEF_START                                       \
-		if( _->list_free->size )                        \
+#define pool_add( _, type, val )                    \
+	DEF_START                                         \
+	if( _->list_free->size )                          \
 		{                                               \
 			_->pos = list_pop_front( _->list_free, u32 ); \
 			list_set( _->list_data, type, _->pos, val );  \
 		}                                               \
-		else                                            \
+	else                                              \
 		{                                               \
 			_->pos = _->list_data->size;                  \
 			list_add( _->list_data, type, val );          \
 		}                                               \
-		DEF_END
+	DEF_END
 
-	#define pool_delete( _, pos )                                        \
-		DEF_START                                                          \
-		list_add( _->list_free, u32, pos );                                \
-		list_set( _->list_data, u8, pos * _->list_data->size_type, 0x0u ); \
-		DEF_END
+#define pool_delete( _, pos )                                        \
+	DEF_START                                                          \
+	list_add( _->list_free, u32, pos );                                \
+	list_set( _->list_data, u8, pos * _->list_data->size_type, 0x0u ); \
+	DEF_END
 
 //
+
+/// rgba
+
+make_struct
+{
+	u8 r, g, b, a;
+}
+struct_rgba;
+make_type( struct_rgba ) rgba;
+
+#define rgba( _ ) ( ( rgba )( _ ) )
+#define size_rgba ( size_( rgba ) )
+#define make_rgba( r, g, b, a ) ( ( rgba ){ r, g, b, a } )
+#define print_rgba( _ ) print( "%hhu,%hhu,%hhu,%hhu", rgba( _ ).r, rgba( _ ).g, rgba( _ ).b, rgba( _ ).a )
+
+//
+
+/// vectors
+
+// float
+
+make_struct
+{
+	f32 x, y;
+}
+struct_vec2;
+#define struct_vec2_( _ ) ( ( struct_vec2 )( _ ) )
+#define struct_vec2_size ( size_( struct_vec2 ) )
+#define make_struct_vec2( x, y ) ( ( struct_vec2 ){ x, y } )
+
+make_struct
+{
+	f32 x, y, z;
+}
+struct_vec3;
+#define struct_vec3_size ( size_( struct_vec3 ) )
+#define struct_vec3_( _ ) ( ( struct_vec3 )( _ ) )
+#define make_struct_vec3( x, y, z ) \
+	( struct_vec3 ) { x, y, z }
+
+make_struct
+{
+	f32 x, y, z, w;
+}
+struct_vec4;
+#define struct_vec4_size ( size_( struct_vec4 ) )
+#define struct_vec4_( _ ) ( ( struct_vec4 )( _ ) )
+#define make_struct_vec4( x, y, z, w ) \
+	( struct_vec4 ) { x, y, z, w }
+
+// signed int
+
+make_struct
+{
+	s32 x, y;
+}
+struct_svec2;
+#define struct_svec2_size ( size_( struct_svec2 ) )
+#define struct_svec2_( _ ) ( ( struct_svec2 )( _ ) )
+#define make_struct_svec2( x, y ) \
+	( struct_svec2 ) { x, y }
+
+make_struct
+{
+	s32 x, y, z;
+}
+struct_svec3;
+#define struct_svec3_size ( size_( struct_svec3 ) )
+#define struct_svec3_( _ ) ( ( struct_svec3 )( _ ) )
+#define make_struct_svec3( x, y, z ) \
+	( struct_svec3 ) { x, y, z }
+
+make_struct
+{
+	s32 x, y, z, w;
+}
+struct_svec4;
+#define struct_svec4_size ( size_( struct_svec4 ) )
+#define struct_svec4_( _ ) ( ( struct_svec4 )( _ ) )
+#define make_struct_svec4( x, y, z, w ) \
+	( struct_svec4 ) { x, y, z, w }
+
+// unsigned int
+
+make_struct
+{
+	u32 x, y;
+}
+struct_uvec2;
+#define struct_uvec2_size ( size_( struct_uvec2 ) )
+#define struct_uvec2_( _ ) ( ( struct_uvec2 )( _ ) )
+#define make_struct_uvec2( x, y ) \
+	( struct_uvec2 ) { x, y }
+
+make_struct
+{
+	u32 x, y, z;
+}
+struct_uvec3;
+#define struct_uvec3_size ( size_( struct_uvec3 ) )
+#define struct_uvec3_( _ ) ( ( struct_uvec3 )( _ ) )
+#define make_struct_uvec3( x, y, z ) \
+	( struct_uvec3 ) { x, y, z }
+
+make_struct
+{
+	u32 x, y, z, w;
+}
+struct_uvec4;
+#define struct_uvec4_size ( size_( struct_uvec4 ) )
+#define struct_uvec4_( _ ) ( ( struct_uvec4 )( _ ) )
+#define make_struct_uvec4( x, y, z, w ) \
+	( struct_uvec4 ) { x, y, z, w }
+
 
 /*
 
