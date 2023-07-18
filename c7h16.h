@@ -28,8 +28,10 @@
 	#undef OS_LINUX
 	#define OS_LINUX 1
 	#include <sys/mman.h>
-	#include <immintrin.h>
-	#include <pthread.h>
+	#define NULL ((void*)0)
+	// #include <immintrin.h>
+	// #include <pthread.h>
+	// #include <X11/Xlib.h>
 #elif defined( __MACOSX__ ) || defined( __APPLE__ )
 #undef OS_MACOS
 	#define OS_MACOS 1
@@ -250,13 +252,14 @@ make_type( long double ) f64;
 /// mem
 
 #if OS_WINDOWS
-	#define allocate_mem( n, size_bytes ) VirtualAlloc( null, ( n ) * ( size_bytes ), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE )
+#define allocate_mem( n, size_bytes ) VirtualAlloc( null, ( n ) * ( size_bytes ), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE )
+#define free_mem( p ) VirtualFree( p, 0, MEM_RELEASE )
 #elif OS_LINUX
-	#define allocate_mem( n, size_bytes ) mmap( null, ( n ) * ( size_bytes ), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 )
+#define allocate_mem( n, size_bytes ) mmap( null, ( n ) * ( size_bytes ), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 )
+#define free_mem( p ) munmap( p, size_( p ) )
 #endif
 
 #define new_mem( type, n ) ( ( ptr( type ) )allocate_mem( n, size_( type ) ) )
-#define free_mem( _ ) free( _ )
 
 fn pure_ptr copy_mem( in pure_ptr restrict dst, in pure_ptr restrict src, u64 n ) {
 	ptr( u64 ) dl = (ptr( u64 ))dst;
@@ -413,8 +416,8 @@ fn text make_text( in text in_formatted_text, va_list in_args ) {
 //
 
 #if OS_LINUX
-ssize_t write( const void* buf, size_t count ) {
-	ssize_t result;
+s32 write( const void* buf, size_t count ) {
+	s32 result;
 	asm volatile
 		(
 		"movl $1, %%eax;" // syscall number for write
@@ -591,11 +594,9 @@ fn list $new_list( in u32 in_size, in u32 in_size_mem, in u32 in_size_type, in p
     if( _->size == _->size_mem )                                                            \
     {                                                                                       \
       s32 temp_new_size_mem = ( s32 )( _->size_mem << 1 );                                  \
-      pure_ptr new_data = realloc( pure_ptr( _->data ), temp_new_size_mem * _->size_type ); \
-      if( new_data == null )                                                                \
-      {                                                                                     \
-        break;                                                                              \
-      }                                                                                     \
+      pure_ptr new_data = allocate_mem( temp_new_size_mem, _->size_type ); \
+      copy_mem( new_data, _->data, _->size * _->size_type );                                 \
+      free_mem( _->data );                                                                     \
       _->size_mem = temp_new_size_mem;                                                      \
       _->data = new_data;                                                                   \
     }                                                                                       \
@@ -610,12 +611,12 @@ fn list $new_list( in u32 in_size, in u32 in_size_mem, in u32 in_size_type, in p
     DEF_END
 
 #define list_shift( _, n )                                      \
-    memmove( pure_ptr( _->data ),                                 \
+    copy_mem( pure_ptr( _->data ),                                 \
              pure_ptr( _->data + ( ( -( n ) ) * _->size_type ) ), \
              ( ( _->size -= abs( n ) ) ) * _->size_type )
 
 #define list_move( _, start, length, n )                                   \
-    memmove( pure_ptr( _->data + ( ( ( start ) + ( n ) ) * _->size_type ) ), \
+    copy_mem( pure_ptr( _->data + ( ( ( start ) + ( n ) ) * _->size_type ) ), \
              pure_ptr( _->data + ( ( start )*_->size_type ) ),               \
              ( length )*_->size_type )
 
