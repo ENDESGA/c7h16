@@ -5,7 +5,7 @@
 -------
 -------
 -------
-# ***PROJECT_HEPTANE : : : .***
+# ***c7h16 (heptane) : : : .***
 ***an explicit, minimal, and esoteric abstraction of C99 to alter it into a fuel for graphical applications and interfaces.***
 
 ```c
