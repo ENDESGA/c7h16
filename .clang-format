@@ -39,7 +39,7 @@ BraceWrapping:
   AfterUnion: true
   BeforeElse: true
   BeforeWhile: true
-  IndentBraces: true
+  IndentBraces: false
   SplitEmptyFunction: true
   SplitEmptyRecord: true
 
@@ -59,13 +59,11 @@ IndentWrappedFunctionNames: false
 
 KeepEmptyLinesAtTheStartOfBlocks: false
 
-LineEnding: LF
-
 MaxEmptyLinesToKeep: 1
 
 PointerAlignment: Left
 
-PPIndentWidth: 1
+PPIndentWidth: 2
 
 QualifierAlignment: Custom
 QualifierOrder: ['volatile', 'static', 'inline', 'const', 'type' ]
@@ -94,5 +92,3 @@ SpacesInConditionalStatement: true
 TabWidth: 2
 
 UseTab: Always
-
-#///////
