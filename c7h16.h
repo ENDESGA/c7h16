@@ -7,13 +7,12 @@
 // // // // // // //
 
 /*
-//
 //	functional verbs:
 //	-------
-//	make_H() -> construct H
-//	new_H() -> out allocated H in memory
-//	create_H() -> out constructed new_H()
-//
+//	make_H() -> design H structure
+//	allocate_H() -> out allocated H in memory
+//	new_H() -> out constructed allocate_H()
+//	create_H() -> construct in-scope value
 */
 
 #pragma once
@@ -29,23 +28,27 @@
 		#undef OS_WINDOWS
 		#define OS_WINDOWS 1
 		#define FARPROC WINDOWS_FARPROC
+		#define WIN32_LEAN_AND_MEAN
+		#define VC_EXTRALEAN
+		#define NOGDICAPMASKS
 		#include <windows.h>
 		#undef FARPROC
 		#undef near
 		#undef far
-		#include <intrin.h>
 	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 		#undef OS_LINUX
 		#define OS_LINUX 1
+
 		#include <unistd.h>
 		#include <sys/mman.h>
 		#include <sys/stat.h>
 		#include <sys/syscall.h>
+		#include <sys/wait.h>
 		#include <fcntl.h>
-		#include <immintrin.h>
 		#include <pthread.h>
 		#include <X11/Xlib.h>
 		#include <X11/keysym.h>
+
 	#elif defined( __MACOSX__ ) || defined( __APPLE__ )
 		#undef OS_MACOS
 		#define OS_MACOS 1
@@ -58,7 +61,9 @@
 		#define COMPILER_MSVC
 	#elif defined( __GNUC__ )
 		#define COMPILER_GCC
+
 		#include <stdatomic.h>
+
 	#else
 		#define COMPILER_OTHER
 	#endif
@@ -168,7 +173,7 @@
 	#define enum( _ ) enum _
 	#define union( _ ) union _
 
-	#define make( _, ... ) ( ( _ ){ __VA_ARGS__ } )
+	#define create( _, ... ) ( ( _ ){ __VA_ARGS__ } )
 
 	#define make_type( _ ) typedef _
 	#define make_ptr( _ ) make_type( ptr( _ ) )
@@ -316,8 +321,6 @@ make_type( double ) f64;
 
 //
 
-//
-
 /// math
 
 inl f64 modulo( in f64 x, in f64 y )
@@ -384,7 +387,8 @@ inl f64 _exp( f64 n )
 
 	out( original_x > 0 ) ? result : 1. / result;
 }
-#define exp( x ) _exp( x )
+
+	#define exp( x ) _exp( x )
 
 inl f64 _log( f64 x )
 {
@@ -453,7 +457,8 @@ inl f64 _log( f64 x )
 
 	out( result * y * 2. ) + ( expansions * .6931471805599453 );
 }
-#define log( x ) _log( x )
+
+	#define log( x ) _log( x )
 
 inl f64 power( in f64 base, in f64 exponent )
 {
@@ -469,7 +474,8 @@ inl f64 _sqrt( in f64 x )
 {
 	out power( x, .5 );
 }
-#define sqrt( x ) _sqrt( x )
+
+	#define sqrt( x ) _sqrt( x )
 
 /*
 f64 sin( f64 x )
@@ -527,24 +533,29 @@ inl f64 _cos( f64 x )
 {
 	x = modulo( x, tau ) * .5;
 	f64 x_sqr = x * x;
-	f64 result = ( ( ( ( ( 1. / 362880. ) * x_sqr - ( 1. / 5040. ) ) * x_sqr + ( 1. / 120. ) ) * x_sqr - ( 1. / 6. ) ) * x_sqr + 1. ) * x;
+	f64 result =
+		( ( ( ( ( 1. / 362880. ) * x_sqr - ( 1. / 5040. ) ) * x_sqr + ( 1. / 120. ) ) * x_sqr - ( 1. / 6. ) ) * x_sqr + 1. ) * x;
 	out( result * result * -2. ) + 1.;
 }
-#define cos( x ) _cos( x )
+
+	#define cos( x ) _cos( x )
 
 	#define tausqr ( tau * tau )
 
 // copyright @ENDESGA 2023
 inl float fast_sin( float x )
 {
-	float px = modulo(x + pi, tau);
-	x = (px < 0.) ? (pi - (px + tau)) : (pi - px);
-	if (px >= pi) {
+	float px = modulo( x + pi, tau );
+	x = ( px < 0. ) ? ( pi - ( px + tau ) ) : ( pi - px );
+	if( px >= pi )
+	{
 		x += pi_d2;
-		return -(4. - (5. * tausqr) / (tausqr + (4. * x * x)));
-	} else {
+		return -( 4. - ( 5. * tausqr ) / ( tausqr + ( 4. * x * x ) ) );
+	}
+	else
+	{
 		x -= pi_d2;
-		return -((5. * tausqr) / (tausqr + (4. * x * x)) - 4.);
+		return -( ( 5. * tausqr ) / ( tausqr + ( 4. * x * x ) ) - 4. );
 	}
 }
 
@@ -696,13 +707,15 @@ inl f64 _sin( in f64 x )
 {
 	out cos( x + pi_d2 );
 }
-#define sin( x ) _sin( x )
+
+	#define sin( x ) _sin( x )
 
 inl f64 _tan( in f64 x )
 {
 	out sin( x ) / cos( x );
 }
-#define tan( x ) _tan( x )
+
+	#define tan( x ) _tan( x )
 
 /*
 fn f64 sinh( in f64 x )
@@ -804,14 +817,14 @@ make_type( __gnuc_va_list ) va_list;
 /// mem
 
 	#if OS_WINDOWS
-		#define allocate_mem( n, size_bytes ) VirtualAlloc( null, ( n ) * ( size_bytes ), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE )
+		#define allocate_mem( bytes ) VirtualAlloc( null, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE )
 		#define free_mem( p ) VirtualFree( p, 0, MEM_RELEASE )
 	#elif OS_LINUX
-		#define allocate_mem( n, size_bytes ) mmap( null, ( n ) * ( size_bytes ), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 )
+		#define allocate_mem( bytes ) mmap( null, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 )
 		#define free_mem( p ) munmap( p, size_( p ) )
 	#endif
 
-	#define new_mem( type, n ) ( ( ptr( type ) )allocate_mem( n, size_( type ) ) )
+	#define new_mem( type, n ) to( ptr( type ), allocate_mem( n* size_( type ) ) )
 
 inl ptr( pure ) copy_mem( ptr( pure ) dst, in ptr( pure ) src, u64 n )
 {
@@ -837,7 +850,7 @@ inl ptr( pure ) copy_mem( ptr( pure ) dst, in ptr( pure ) src, u64 n )
 	#define upper_char( _ ) ( ( _ )&0xDF )
 	#define lower_char( _ ) ( ( _ ) | 0x20 )
 	#define upper_char_safe( _ ) ( ( ( _ ) >= 'a' and ( _ ) <= 'z' ) ? upper_char( _ ) : ( _ ) )
-	#define lower_char_safe( _ ) ( ( ( _ ) >= 'A' and ( _ ) <= 'Z' ) ? upper_char( _ ) : ( _ ) )
+	#define lower_char_safe( _ ) ( ( ( _ ) >= 'A' and ( _ ) <= 'Z' ) ? lower_char( _ ) : ( _ ) )
 
 u8 dec_to_u8[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0' };
 u8 hex_to_u8[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', '0' };
@@ -846,8 +859,8 @@ make_type( ptr( s8 ) ) text;
 	#define to_text( _ ) to( text, _ )
 	#define size_text ( size_( text ) )
 
-	#define new_text( SIZE ) new_mem( s8, SIZE )
-	#define make_text( default_text, extra_char_mem ) copy_mem( new_text( text_length( default_text ) + ( extra_char_mem ) + 1 ), default_text, text_length( default_text ) )
+	#define assign_text( SIZE ) new_mem( s8, SIZE )
+	#define new_text( default_text, extra_char_mem ) copy_mem( assign_text( text_length( default_text ) + ( extra_char_mem ) + 1 ), default_text, text_length( default_text ) )
 	#define free_text( _ ) \
 		if( _ != null ) free_mem( _ )
 	#define print_text( _ ) print( "%s", text( _ ) )
@@ -888,22 +901,36 @@ inl u64 text_length( in text str )
 	}
 }
 
-inl text copy_text( in text in_dst, in text in_text )
+inl text copy_text( text in_dst, text in_text )
 {
-	if( in_text == null ) out in_dst;
-	ifn( val( in_text ) ) out in_dst;
+	if( !in_text or !val( in_text ) ) out in_dst;
+
+	ptr( u64 ) src_word;
+	ptr( u64 ) dst_word;
+	text src_byte;
+	text dst_byte;
 	u32 n = text_length( in_text );
-	ptr( u64 ) dl = ( ptr( u64 ) )in_dst;
-	ptr( u64 ) sl = ( ptr( u64 ) )in_text;
+
+	as( ( ( u64 )in_text & ( size_u64 - 1 ) ) and n )
+	{
+		*in_dst++ = *in_text++;
+		n--;
+	}
+
+	src_word = to( ptr( u64 ), in_text );
+	dst_word = to( ptr( u64 ), in_dst );
 	as( n >= size_u64 )
 	{
-		val( dl )++ = val( sl )++;
+		*dst_word++ = *src_word++;
 		n -= size_u64;
 	}
 
-	ptr( u8 ) d8 = ( ptr( u8 ) )dl;
-	ptr( u8 ) s8 = ( ptr( u8 ) )sl;
-	as( n-- ) val( d8 )++ = val( s8 )++;
+	src_byte = to( text, src_word );
+	dst_byte = to( text, dst_word );
+	as( n-- )
+	{
+		*dst_byte++ = *src_byte++;
+	}
 
 	out in_dst;
 }
@@ -946,8 +973,7 @@ inl text int_to_text( s32 in_int )
 
 	// Calculate the length of the resulting string
 	int temp = in_int;
-	do
-	{
+	do {
 		temp /= 10;
 		length++;
 	}
@@ -970,8 +996,7 @@ inl text int_to_text( s32 in_int )
 
 	// Convert the integer to string starting from the end
 	int index = length - 1;
-	do
-	{
+	do {
 		str[ index-- ] = abs( in_int % 10 ) + '0';
 		in_int /= 10;
 	}
@@ -991,7 +1016,7 @@ inl text int_to_text( s32 in_int )
 
 inl text va_format_text( in text in_formatted_text, va_list in_args )
 {
-	text temp_text = new_text( 512 );
+	text temp_text = assign_text( 512 );
 	text text_ptr = temp_text;
 	text formatted_ptr = in_formatted_text;
 
@@ -1088,8 +1113,71 @@ fn print( in text in_formatted_text, ... )
 	free_text( temp_text );
 }
 
-text NL = "\n";
+global text NL = "\n";
 	#define print_ln print( NL )
+
+//
+
+flag system_command( text command )
+{
+	#if OS_WINDOWS
+	STARTUPINFO si;
+	PROCESS_INFORMATION _pri;
+
+	ZeroMemory( ref(si), size_( si ) );
+	si.cb = size_( si );
+	ZeroMemory( ref(_pri), size_( _pri ) );
+
+	flag result = CreateProcess(
+		NULL,
+		command,
+		NULL,
+		NULL,
+		FALSE,
+		0,
+		NULL,
+		NULL,
+		ref(si),
+		ref(_pri)
+	);
+
+	if( result )
+	{
+		WaitForSingleObject( _pri.hProcess, INFINITE );
+
+		CloseHandle( _pri.hProcess );
+		CloseHandle( _pri.hThread );
+	}
+
+	out not to_flag(result);
+	#elif OS_LINUX
+	pid_t pid = fork();
+
+	if( pid < 0 )
+	{
+		out no;
+	}
+	elif( pid == 0 )
+	{
+		text args[] = { "/bin/sh", "-c", command, null };
+		execvp( args[ 0 ], args );
+		out yes;
+	}
+	else
+	{
+		s32 status;
+		waitpid( pid, ref( status ), 0 );
+		if( WIFEXITED( status ) )
+		{
+			out WEXITSTATUS( status );
+		}
+		else
+		{
+			out no;
+		}
+	}
+	#endif
+}
 
 	//
 
@@ -1194,23 +1282,23 @@ make_union( safe_64 )
 };
 
 	// macros for unsigned integers
-	#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, make( union( safe_8 ), .u = set_value ).s )
-	#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, make( union( safe_16 ), .u = set_value ).s )
-	#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, make( union( safe_32 ), .u = set_value ).s )
-	#define safe_u64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, make( union( safe_64 ), .u = set_value ).s )
-	#define safe_u8_ptr_get( safe_ptr ) make( union( safe_8 ), .s = safe_s8_ptr_get( safe_ptr ) ).u
-	#define safe_u16_ptr_get( safe_ptr ) make( union( safe_16 ), .s = safe_s16_ptr_get( safe_ptr ) ).u
-	#define safe_u32_ptr_get( safe_ptr ) make( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).u
-	#define safe_u64_ptr_get( safe_ptr ) make( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).u
+	#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, create( union( safe_8 ), .u = set_value ).s )
+	#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, create( union( safe_16 ), .u = set_value ).s )
+	#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, create( union( safe_32 ), .u = set_value ).s )
+	#define safe_u64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, create( union( safe_64 ), .u = set_value ).s )
+	#define safe_u8_ptr_get( safe_ptr ) create( union( safe_8 ), .s = safe_s8_ptr_get( safe_ptr ) ).u
+	#define safe_u16_ptr_get( safe_ptr ) create( union( safe_16 ), .s = safe_s16_ptr_get( safe_ptr ) ).u
+	#define safe_u32_ptr_get( safe_ptr ) create( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).u
+	#define safe_u64_ptr_get( safe_ptr ) create( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).u
 
-	#define safe_u8_set( safe_var, set_value ) safe_s8_set( safe_var, make( union( safe_8 ), .u = set_value ).s )
-	#define safe_u16_set( safe_var, set_value ) safe_s16_set( safe_var, make( union( safe_16 ), .u = set_value ).s )
-	#define safe_u32_set( safe_var, set_value ) safe_s32_set( safe_var, make( union( safe_32 ), .u = set_value ).s )
-	#define safe_u64_set( safe_var, set_value ) safe_s64_set( safe_var, make( union( safe_64 ), .u = set_value ).s )
-	#define safe_u8_get( safe_var ) make( union( safe_8 ), .s = safe_s8_get( safe_var ) ).u
-	#define safe_u16_get( safe_var ) make( union( safe_16 ), .s = safe_s16_get( safe_var ) ).u
-	#define safe_u32_get( safe_var ) make( union( safe_32 ), .s = safe_s32_get( safe_var ) ).u
-	#define safe_u64_get( safe_var ) make( union( safe_64 ), .s = safe_s64_get( safe_var ) ).u
+	#define safe_u8_set( safe_var, set_value ) safe_s8_set( safe_var, create( union( safe_8 ), .u = set_value ).s )
+	#define safe_u16_set( safe_var, set_value ) safe_s16_set( safe_var, create( union( safe_16 ), .u = set_value ).s )
+	#define safe_u32_set( safe_var, set_value ) safe_s32_set( safe_var, create( union( safe_32 ), .u = set_value ).s )
+	#define safe_u64_set( safe_var, set_value ) safe_s64_set( safe_var, create( union( safe_64 ), .u = set_value ).s )
+	#define safe_u8_get( safe_var ) create( union( safe_8 ), .s = safe_s8_get( safe_var ) ).u
+	#define safe_u16_get( safe_var ) create( union( safe_16 ), .s = safe_s16_get( safe_var ) ).u
+	#define safe_u32_get( safe_var ) create( union( safe_32 ), .s = safe_s32_get( safe_var ) ).u
+	#define safe_u64_get( safe_var ) create( union( safe_64 ), .s = safe_s64_get( safe_var ) ).u
 
 	#define safe_u8_inc( safe_var ) safe_s8_inc( safe_var )
 	#define safe_u16_inc( safe_var ) safe_s16_inc( safe_var )
@@ -1222,15 +1310,15 @@ make_union( safe_64 )
 	#define safe_u64_dec( safe_var ) safe_s64_dec( safe_var )
 
 	// macros for floating point numbers
-	#define safe_f32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, make( union( safe_32 ), .f = set_value ).s )
-	#define safe_f64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, make( union( safe_64 ), .f = set_value ).s )
-	#define safe_f32_ptr_get( safe_ptr ) make( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).f
-	#define safe_f64_ptr_get( safe_ptr ) make( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).f
+	#define safe_f32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, create( union( safe_32 ), .f = set_value ).s )
+	#define safe_f64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, create( union( safe_64 ), .f = set_value ).s )
+	#define safe_f32_ptr_get( safe_ptr ) create( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).f
+	#define safe_f64_ptr_get( safe_ptr ) create( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).f
 
-	#define safe_f32_set( safe_var, set_value ) safe_s32_set( safe_var, make( union( safe_32 ), .f = set_value ).s )
-	#define safe_f64_set( safe_var, set_value ) safe_s64_set( safe_var, make( union( safe_64 ), .f = set_value ).s )
-	#define safe_f32_get( safe_var ) make( union( safe_32 ), .s = safe_s32_get( safe_var ) ).f
-	#define safe_f64_get( safe_var ) make( union( safe_64 ), .s = safe_s64_get( safe_var ) ).f
+	#define safe_f32_set( safe_var, set_value ) safe_s32_set( safe_var, create( union( safe_32 ), .f = set_value ).s )
+	#define safe_f64_set( safe_var, set_value ) safe_s64_set( safe_var, create( union( safe_64 ), .f = set_value ).s )
+	#define safe_f32_get( safe_var ) create( union( safe_32 ), .s = safe_s32_get( safe_var ) ).f
+	#define safe_f64_get( safe_var ) create( union( safe_64 ), .s = safe_s64_get( safe_var ) ).f
 
 	// macros for pointers
 	#define safe_ptr_set( safe_ptr, set_value ) safe_s64_set( safe_ptr, set_value )
@@ -1259,7 +1347,7 @@ make_ptr( struct( list ) ) list;
 
 	#define iter_list( _, var ) iter( _->size, var )
 
-inl list __new_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, in ptr( pure ) in_data )
+inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, in ptr( pure ) in_data )
 {
 	list temp_list = new_mem( struct( list ), 1 );
 	//
@@ -1270,23 +1358,24 @@ inl list __new_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, in
 	//
 	out temp_list;
 }
-	#define new_list_data( type, size, data ) __new_list( size, max( 1, size ), size_( type ), to( ptr( pure ), data ) )
+
+	#define new_list_data( type, size, data ) assign_list( size, max( 1, size ), size_( type ), to( ptr( pure ), data ) )
 	#define new_list( type ) new_list_data( type, 0, new_mem( u8, size_( type ) ) )
 
 	#define lock_list( _ ) engage_spinlock( _->lock )
 	#define unlock_list( _ ) vacate_spinlock( _->lock )
 
-	#define list_alloc( _ )                                                     \
-		DEF_START                                                                 \
-		if( _->size == _->size_mem )                                              \
-		{                                                                         \
-			s32 temp_new_size_mem = to_s32( _->size_mem << 1 );                     \
-			ptr( pure ) new_data = allocate_mem( temp_new_size_mem, _->size_type ); \
-			copy_mem( new_data, _->data, _->size * _->size_type );                  \
-			free_mem( _->data );                                                    \
-			_->size_mem = temp_new_size_mem;                                        \
-			_->data = new_data;                                                     \
-		}                                                                         \
+	#define list_alloc( _ )                                                      \
+		DEF_START                                                                  \
+		if( _->size == _->size_mem )                                               \
+		{                                                                          \
+			s32 temp_new_size_mem = to_s32( _->size_mem << 1 );                      \
+			ptr( pure ) new_data = allocate_mem( temp_new_size_mem * _->size_type ); \
+			copy_mem( new_data, _->data, _->size * _->size_type );                   \
+			free_mem( _->data );                                                     \
+			_->size_mem = temp_new_size_mem;                                         \
+			_->data = new_data;                                                      \
+		}                                                                          \
 		DEF_END
 
 	#define list_set( _, type, pos, val ) ( to( ptr( type ), _->data ) )[ ( pos ) ] = ( val )
@@ -1366,6 +1455,7 @@ inl pile __new_pile( in list in_list )
 	//
 	out temp_pile;
 }
+
 	#define new_pile( type ) __new_pile( new_list( type ) )
 
 	#define lock_pile( _ ) engage_spinlock( _->lock )
@@ -1407,7 +1497,7 @@ make_type( struct( rgba ) ) rgba;
 
 	#define to_rgba( _ ) ( to( rgba, _ ) )
 	#define size_rgba ( size_( rgba ) )
-	#define make_rgba( r, g, b, a ) make( rgba, r, g, b, a )
+	#define create_rgba( r, g, b, a ) create( rgba, r, g, b, a )
 	#define print_rgba( _ ) print( "%hhu,%hhu,%hhu,%hhu", rgba( _ ).r, rgba( _ ).g, rgba( _ ).b, rgba( _ ).a )
 
 //
@@ -1422,7 +1512,7 @@ make_struct( fvec2 )
 };
 	#define to_struct_fvec2( _ ) ( to( struct( fvec2 ), _ ) )
 	#define size_struct_fvec2 ( size_( struct( fvec2 ) ) )
-	#define make_struct_fvec2( x, y ) make( struct( fvec2 ), x, y )
+	#define make_struct_fvec2( x, y ) create( struct( fvec2 ), x, y )
 
 make_struct( fvec3 )
 {
@@ -1430,7 +1520,7 @@ make_struct( fvec3 )
 };
 	#define to_struct_fvec3( _ ) ( to( struct( fvec3 ), _ ) )
 	#define size_struct_fvec3 ( size_( struct( fvec3 ) ) )
-	#define make_struct_fvec3( x, y, z ) make( struct( fvec3 ), x, y, z )
+	#define make_struct_fvec3( x, y, z ) create( struct( fvec3 ), x, y, z )
 
 make_struct( fvec4 )
 {
@@ -1438,7 +1528,7 @@ make_struct( fvec4 )
 };
 	#define to_struct_fvec4( _ ) ( to( struct( fvec4 ), _ ) )
 	#define size_struct_fvec4 ( size_( struct( fvec4 ) ) )
-	#define make_struct_fvec4( x, y, z, w ) make( struct( fvec4 ), x, y, z, w )
+	#define make_struct_fvec4( x, y, z, w ) create( struct( fvec4 ), x, y, z, w )
 
 // signed int
 
@@ -1448,7 +1538,7 @@ make_struct( svec2 )
 };
 	#define to_struct_svec2( _ ) ( to( struct( svec2 ), _ ) )
 	#define size_struct_svec2 ( size_( struct( svec2 ) ) )
-	#define make_struct_svec2( x, y ) make( struct( svec2 ), x, y )
+	#define make_struct_svec2( x, y ) create( struct( svec2 ), x, y )
 
 make_struct( svec3 )
 {
@@ -1456,7 +1546,7 @@ make_struct( svec3 )
 };
 	#define to_struct_svec3( _ ) ( to( struct( svec3 ), _ ) )
 	#define size_struct_svec3 ( size_( struct( svec3 ) ) )
-	#define make_struct_svec3( x, y, z ) make( struct( svec3 ), x, y, z )
+	#define make_struct_svec3( x, y, z ) create( struct( svec3 ), x, y, z )
 
 make_struct( svec4 )
 {
@@ -1464,7 +1554,7 @@ make_struct( svec4 )
 };
 	#define to_struct_svec4( _ ) ( to( struct( svec4 ), _ ) )
 	#define size_struct_svec4 ( size_( struct( svec4 ) ) )
-	#define make_struct_svec4( x, y, z, w ) make( struct( svec4 ), x, y, z, w )
+	#define make_struct_svec4( x, y, z, w ) create( struct( svec4 ), x, y, z, w )
 
 // unsigned int
 
@@ -1474,7 +1564,7 @@ make_struct( uvec2 )
 };
 	#define to_struct_uvec2( _ ) ( to( struct( uvec2 ), _ ) )
 	#define size_struct_uvec2 ( size_( struct( uvec2 ) ) )
-	#define make_struct_uvec2( x, y ) make( struct( uvec2 ), x, y )
+	#define make_struct_uvec2( x, y ) create( struct( uvec2 ), x, y )
 
 make_struct( uvec3 )
 {
@@ -1482,7 +1572,7 @@ make_struct( uvec3 )
 };
 	#define to_struct_uvec3( _ ) ( to( struct( uvec3 ), _ ) )
 	#define size_struct_uvec3 ( size_( struct( uvec3 ) ) )
-	#define make_struct_uvec3( x, y, z ) make( struct( uvec3 ), x, y, z )
+	#define make_struct_uvec3( x, y, z ) create( struct( uvec3 ), x, y, z )
 
 make_struct( uvec4 )
 {
@@ -1490,10 +1580,8 @@ make_struct( uvec4 )
 };
 	#define to_struct_uvec4( _ ) ( to( struct( uvec4 ), _ ) )
 	#define size_struct_uvec4 ( size_( struct( uvec4 ) ) )
-	#define make_struct_uvec4( x, y, z, w ) make( struct( uvec4 ), x, y, z, w )
+	#define make_struct_uvec4( x, y, z, w ) create( struct( uvec4 ), x, y, z, w )
 
 //
-
-
 
 #endif
