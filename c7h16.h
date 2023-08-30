@@ -7,12 +7,12 @@
 // // // // // // //
 
 /*
-//	functional verbs:
-//	-------
-//	make_H() -> design H structure
-//	allocate_H() -> out allocated H in memory
-//	new_H() -> out constructed allocate_H()
-//	create_H() -> construct in-scope value
+	functional verbs:
+	-------
+	make_H() -> design H structure
+	allocate_H() -> out allocated H in memory
+	new_H() -> out constructed allocate_H()
+	create_H() -> construct in-scope value
 */
 
 #pragma once
@@ -24,13 +24,13 @@
 	#define OS_MACOS 0
 	#define OS_OTHER 0
 
-	#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ )
+	#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ ) || defined( _WIN64 )
 		#undef OS_WINDOWS
 		#define OS_WINDOWS 1
 		#define FARPROC WINDOWS_FARPROC
-		#define WIN32_LEAN_AND_MEAN
-		#define VC_EXTRALEAN
-		#define NOGDICAPMASKS
+		// #define WIN32_LEAN_AND_MEAN
+		// #define VC_EXTRALEAN
+		// #define NOGDICAPMASKS
 		#include <windows.h>
 		#undef FARPROC
 		#undef near
@@ -48,6 +48,7 @@
 		#include <pthread.h>
 		#include <X11/Xlib.h>
 		#include <X11/keysym.h>
+		#include <X11/Xutil.h>
 
 	#elif defined( __MACOSX__ ) || defined( __APPLE__ )
 		#undef OS_MACOS
@@ -106,6 +107,8 @@
 	#define tau_d5 1.2566370614359172953850573533118
 	#define tau_d6 1.0471975511965977461542144610932
 	#define tau_d7 .897597901025655210989326680937
+	#define tau_d8 .785398163
+	#define pi_d4 tau_d8
 
 	#define tau_p2 39.478417604357434475337963999505
 	#define tau_p3 248.05021344239856140381052053681
@@ -717,6 +720,60 @@ inl f64 _tan( in f64 x )
 
 	#define tan( x ) _tan( x )
 
+inl f64 atan( in f64 x )
+{
+	if( x > 1.0 )
+	{
+		return pi_d2 - atan( 1 / x );
+	}
+	else if( x < -1.0 )
+	{
+		return -pi_d2 - atan( 1 / x );
+	}
+
+	double sum = x;
+	double term = x;
+	double xsquared = x * x;
+	double denominator = 1.0;
+
+	for( int i = 0; i < 10; i++ )
+	{
+		term *= xsquared;
+		denominator += 2.0;
+		sum -= term / denominator;
+		term *= xsquared;
+		denominator += 2.0;
+		sum += term / denominator;
+	}
+
+	return sum;
+}
+
+inl f64 atan2( in f64 y, in f64 x )
+{
+	if( x > 0 ) out atan( y / x ) + pi_d2;
+	if( y >= 0 and x < 0 ) out atan( y / x ) + pi + pi_d2;
+	if( y < 0 and x < 0 ) out atan( y / x ) - pi_d2;
+	if( x == 0 and y != 0 ) out( y > 0 ) ? pi : 0;
+	out 0.0;
+}
+
+inl f64 angle_diff( in f64 a, in f64 b )
+{
+	double diff = modulo( b - a, tau );
+
+	if( diff > pi )
+	{
+		diff -= tau;
+	}
+	elif( diff < -pi )
+	{
+		diff += tau;
+	}
+
+	return diff;
+}
+
 /*
 fn f64 sinh( in f64 x )
 {
@@ -737,9 +794,9 @@ fn f64 _tanh( in f64 x )
 
 //
 
-/// time
+/// nano
 
-inl u64 get_nano()
+inl u64 get_ns()
 {
 	#ifdef _WIN32
 	LARGE_INTEGER frequency;
@@ -754,7 +811,7 @@ inl u64 get_nano()
 	#endif
 }
 
-fn sleep_nano( u64 ns )
+fn sleep_ns( u64 ns )
 {
 	#ifdef _WIN32
 	HANDLE timer = CreateWaitableTimer( NULL, TRUE, NULL );
@@ -784,13 +841,13 @@ fn sleep_nano( u64 ns )
 make_struct( maybe )
 {
 	flag valid;
-	ptr( pure ) value;
+	u64 value;
 };
 make_type( struct( maybe ) ) maybe;
 
 inl maybe validate_maybe( ptr( pure ) in_val )
 {
-	out( maybe ){ .valid = ( ( in_val == null ) ? no : yes ), .value = ( in_val ) };
+	out( maybe ){ .valid = ( ( val( to( ptr( u64 ), in_val ) ) == 0 ) ? no : yes ), .value = val( to( ptr( u64 ), in_val ) ) };
 }
 
 //
@@ -1114,7 +1171,28 @@ fn print( in text in_formatted_text, ... )
 }
 
 global text NL = "\n";
-	#define print_ln print( NL )
+	#define print_nl print( NL )
+
+	#define print_debug( ... )        \
+		DEF_START                       \
+		print( "DEBUG: " __VA_ARGS__ ); \
+		print_nl;                       \
+		DEF_END
+
+	#define print_error( IF_YES, ... )  \
+		DEF_START                         \
+		if( IF_YES )                      \
+		{                                 \
+			print( "ERROR: " __VA_ARGS__ ); \
+			print_nl;                       \
+		}                                 \
+		DEF_END
+
+	#define print_trace( ... )        \
+		DEF_START                       \
+		print( "TRACE: " __VA_ARGS__ ); \
+		print_nl;                       \
+		DEF_END
 
 //
 
@@ -1124,9 +1202,9 @@ flag system_command( text command )
 	STARTUPINFO si;
 	PROCESS_INFORMATION _pri;
 
-	ZeroMemory( ref(si), size_( si ) );
+	ZeroMemory( ref( si ), size_( si ) );
 	si.cb = size_( si );
-	ZeroMemory( ref(_pri), size_( _pri ) );
+	ZeroMemory( ref( _pri ), size_( _pri ) );
 
 	flag result = CreateProcess(
 		NULL,
@@ -1137,8 +1215,8 @@ flag system_command( text command )
 		0,
 		NULL,
 		NULL,
-		ref(si),
-		ref(_pri)
+		ref( si ),
+		ref( _pri )
 	);
 
 	if( result )
@@ -1149,7 +1227,7 @@ flag system_command( text command )
 		CloseHandle( _pri.hThread );
 	}
 
-	out not to_flag(result);
+	out not to_flag( result );
 	#elif OS_LINUX
 	pid_t pid = fork();
 
@@ -1419,7 +1497,7 @@ inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, i
 		iter( _->size, n ) _->data[ n ] = ( val ); \
 		DEF_END
 
-	#define list_free( _ )     \
+	#define free_list( _ )     \
 		free_mem( ( _ )->data ); \
 		free_mem( _ )
 
@@ -1476,13 +1554,20 @@ inl pile __new_pile( in list in_list )
 		}                                                    \
 		DEF_END
 
-	#define pile_find( _, type, pos ) validate_maybe( list_get( _->data, type, pos ) )
+	#define pile_find( _, type, pos ) validate_maybe( ref( list_get( _->data, type, pos ) ) )
 
 	#define pile_delete( _, pos )                              \
 		DEF_START                                                \
 		_->size--;                                               \
 		list_add( _->data_free, u32, pos );                      \
 		list_set( _->data, u8, pos * _->data->size_type, 0x0u ); \
+		DEF_END
+
+	#define free_pile( _ )       \
+		DEF_START                  \
+		free_list( _->data );      \
+		free_list( _->data_free ); \
+		free_mem( _ );             \
 		DEF_END
 
 //
@@ -1512,7 +1597,7 @@ make_struct( fvec2 )
 };
 	#define to_struct_fvec2( _ ) ( to( struct( fvec2 ), _ ) )
 	#define size_struct_fvec2 ( size_( struct( fvec2 ) ) )
-	#define make_struct_fvec2( x, y ) create( struct( fvec2 ), x, y )
+	#define create_struct_fvec2( x, y ) create( struct( fvec2 ), x, y )
 
 make_struct( fvec3 )
 {
@@ -1520,7 +1605,7 @@ make_struct( fvec3 )
 };
 	#define to_struct_fvec3( _ ) ( to( struct( fvec3 ), _ ) )
 	#define size_struct_fvec3 ( size_( struct( fvec3 ) ) )
-	#define make_struct_fvec3( x, y, z ) create( struct( fvec3 ), x, y, z )
+	#define create_struct_fvec3( x, y, z ) create( struct( fvec3 ), x, y, z )
 
 make_struct( fvec4 )
 {
@@ -1528,7 +1613,7 @@ make_struct( fvec4 )
 };
 	#define to_struct_fvec4( _ ) ( to( struct( fvec4 ), _ ) )
 	#define size_struct_fvec4 ( size_( struct( fvec4 ) ) )
-	#define make_struct_fvec4( x, y, z, w ) create( struct( fvec4 ), x, y, z, w )
+	#define create_struct_fvec4( x, y, z, w ) create( struct( fvec4 ), x, y, z, w )
 
 // signed int
 
@@ -1538,7 +1623,7 @@ make_struct( svec2 )
 };
 	#define to_struct_svec2( _ ) ( to( struct( svec2 ), _ ) )
 	#define size_struct_svec2 ( size_( struct( svec2 ) ) )
-	#define make_struct_svec2( x, y ) create( struct( svec2 ), x, y )
+	#define create_struct_svec2( x, y ) create( struct( svec2 ), x, y )
 
 make_struct( svec3 )
 {
@@ -1546,7 +1631,7 @@ make_struct( svec3 )
 };
 	#define to_struct_svec3( _ ) ( to( struct( svec3 ), _ ) )
 	#define size_struct_svec3 ( size_( struct( svec3 ) ) )
-	#define make_struct_svec3( x, y, z ) create( struct( svec3 ), x, y, z )
+	#define create_struct_svec3( x, y, z ) create( struct( svec3 ), x, y, z )
 
 make_struct( svec4 )
 {
@@ -1554,7 +1639,7 @@ make_struct( svec4 )
 };
 	#define to_struct_svec4( _ ) ( to( struct( svec4 ), _ ) )
 	#define size_struct_svec4 ( size_( struct( svec4 ) ) )
-	#define make_struct_svec4( x, y, z, w ) create( struct( svec4 ), x, y, z, w )
+	#define create_struct_svec4( x, y, z, w ) create( struct( svec4 ), x, y, z, w )
 
 // unsigned int
 
@@ -1564,7 +1649,7 @@ make_struct( uvec2 )
 };
 	#define to_struct_uvec2( _ ) ( to( struct( uvec2 ), _ ) )
 	#define size_struct_uvec2 ( size_( struct( uvec2 ) ) )
-	#define make_struct_uvec2( x, y ) create( struct( uvec2 ), x, y )
+	#define create_struct_uvec2( x, y ) create( struct( uvec2 ), x, y )
 
 make_struct( uvec3 )
 {
@@ -1572,7 +1657,7 @@ make_struct( uvec3 )
 };
 	#define to_struct_uvec3( _ ) ( to( struct( uvec3 ), _ ) )
 	#define size_struct_uvec3 ( size_( struct( uvec3 ) ) )
-	#define make_struct_uvec3( x, y, z ) create( struct( uvec3 ), x, y, z )
+	#define create_struct_uvec3( x, y, z ) create( struct( uvec3 ), x, y, z )
 
 make_struct( uvec4 )
 {
@@ -1580,7 +1665,7 @@ make_struct( uvec4 )
 };
 	#define to_struct_uvec4( _ ) ( to( struct( uvec4 ), _ ) )
 	#define size_struct_uvec4 ( size_( struct( uvec4 ) ) )
-	#define make_struct_uvec4( x, y, z, w ) create( struct( uvec4 ), x, y, z, w )
+	#define create_struct_uvec4( x, y, z, w ) create( struct( uvec4 ), x, y, z, w )
 
 //
 
