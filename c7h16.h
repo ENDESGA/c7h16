@@ -10,8 +10,8 @@
 	functional verbs:
 	-------
 	make_H() -> design H structure
-	allocate_H() -> out allocated H in memory
-	new_H() -> out constructed allocate_H()
+	assign_H() -> out assign H in memory
+	new_H() -> out constructed assign_H()
 	create_H() -> construct in-scope value
 */
 
@@ -24,17 +24,16 @@
 	#define OS_MACOS 0
 	#define OS_OTHER 0
 
+	#include <stdlib.h>
+	#include <stdio.h>
+	#include <math.h>
+
 	#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ ) || defined( _WIN64 )
 		#undef OS_WINDOWS
 		#define OS_WINDOWS 1
 		#define FARPROC WINDOWS_FARPROC
-		// #define WIN32_LEAN_AND_MEAN
-		// #define VC_EXTRALEAN
-		// #define NOGDICAPMASKS
 		#include <windows.h>
 		#undef FARPROC
-		#undef near
-		#undef far
 	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 		#undef OS_LINUX
 		#define OS_LINUX 1
@@ -107,7 +106,7 @@
 	#define tau_d5 1.2566370614359172953850573533118
 	#define tau_d6 1.0471975511965977461542144610932
 	#define tau_d7 .897597901025655210989326680937
-	#define tau_d8 .785398163
+	#define tau_d8 .785398163397448309615660845819
 	#define pi_d4 tau_d8
 
 	#define tau_p2 39.478417604357434475337963999505
@@ -171,7 +170,7 @@
 	#define ptr( _ ) _*
 	#define val( _ ) *_
 	#define ref( _ ) &_
-	#define fn_ptr( _, OUTPUT, ... ) OUTPUT to( val( _ ), __VA_ARGS__ )
+	#define fn_ptr( OUTPUT, _, ... ) OUTPUT to( val( _ ), __VA_ARGS__ )
 	#define struct( _ ) struct _
 	#define enum( _ ) enum _
 	#define union( _ ) union _
@@ -180,7 +179,7 @@
 
 	#define make_type( _ ) typedef _
 	#define make_ptr( _ ) make_type( ptr( _ ) )
-	#define make_fn_ptr( _, OUTPUT, ... ) make_type( fn_ptr( _, OUTPUT, __VA_ARGS__ ) )
+	#define make_fn_ptr( OUTPUT, _, ... ) make_type( fn_ptr( OUTPUT, _, __VA_ARGS__ ) )
 	#define make_struct( _ ) struct( _ )
 	#define make_enum( _ ) enum( _ )
 	#define make_union( _ ) union( _ )
@@ -233,15 +232,23 @@
 		if( VAR_LINE( to ) )                    \
 			for( register s32 var = 0; var < VAR_LINE( to ); var++ )
 	#define rep( to_n ) iter( to_n, VAR_LINE( r ) )
+	#define range( from_n, to_n, var ) \
+		for( register s32 var = from_n; var < to_n; var++ )
 
 //
 
 	#define cast( _, TYPE ) ( val( to( ptr( TYPE ), ref( _ ) ) ) )
 
+	// Convert 1D index to 2D (x, y) position
+	#define index_to_2d( INDEX, WIDTH ) ( ( s32[ 2 ] ){ ( INDEX ) % ( WIDTH ), ( INDEX ) / ( WIDTH ) } )
+
+	// Convert 2D (x, y) position to 1D index
+	#define index_from_2d( X, Y, WIDTH ) ( ( Y )*WIDTH + ( X ) )
+
+	#define print( ... ) printf( __VA_ARGS__ )
+
 	#define pure void
-	// #define pure_ptr ptr(pure)
 	#define size_pure size_( pure )
-// #define size_pure_ptr size_( pure_ptr )
 
 make_type( unsigned char ) flag;
 	#define to_flag( _ ) ( !!( _ ) )
@@ -313,6 +320,23 @@ make_type( float ) f32;
 	#define f32_step ( 1.e-6 )
 	#define print_f32( _ ) print( "%f", to_f32( _ ) )
 
+	#define trunc_f32( f ) to_f32( to_s32( f ) )
+
+inl f32 floor_f32( f32 f )
+{
+	out( f < 0. and f != trunc_f32( f ) ) ? trunc_f32( f ) - 1. : trunc_f32( f );
+}
+
+inl f32 round_f32( f32 f )
+{
+	out( f >= 0. ) ? trunc_f32( f + .5 ) : trunc_f32( f - .5 );
+}
+
+inl f32 ceil_f32( f32 f )
+{
+	out( f > 0. and f != trunc_f32( f ) ) ? trunc_f32( f ) + 1. : trunc_f32( f );
+}
+
 make_type( double ) f64;
 	#define to_f64( _ ) ( to( f64, _ ) )
 	#define size_f64 ( size_( f64 ) )
@@ -322,475 +346,22 @@ make_type( double ) f64;
 	#define f64_step ( 1.e-15 )
 	#define print_f64( _ ) print( "%lf", to_f64( _ ) )
 
-//
+	#define trunc_f64( f ) to_f64( to_s64( f ) )
 
-/// math
-
-inl f64 modulo( in f64 x, in f64 y )
+inl f64 floor_f64( f64 f )
 {
-	f64 quotient = x / y;
-	s64 integer_part = ( s64 )quotient;
-	f64 result = x - ( f64 )integer_part * y;
-	out result;
+	out( f < 0. and f != trunc_f64( f ) ) ? trunc_f64( f ) - 1. : trunc_f64( f );
 }
 
-inl f64 _exp( f64 n )
+inl f64 round_f64( f64 f )
 {
-	f64 original_x = n;
-	if( n < 0 ) n = -n;
-
-	u8 reductions = 0;
-
-	as( n > .5 )
-	{
-		if( n <= 1. )
-		{
-			n *= .5;
-			reductions += 1;
-		}
-		elif( n <= 2. )
-		{
-			n *= .25;
-			reductions += 2;
-		}
-		elif( n <= 4. )
-		{
-			n *= .0625;
-			reductions += 4;
-		}
-		elif( n <= 8. )
-		{
-			n *= .03125;
-			reductions += 5;
-		}
-		else
-		{
-			n *= .015625;
-			reductions += 6;
-		}
-	}
-
-	f64 result = ( 1. / FACTORIAL( 13 ) ) * n + ( 1. / FACTORIAL( 12 ) ) * n;
-	result = result * n + ( 1. / FACTORIAL( 11 ) );
-	result = result * n + ( 1. / FACTORIAL( 10 ) );
-	result = result * n + ( 1. / FACTORIAL( 9 ) );
-	result = result * n + ( 1. / FACTORIAL( 8 ) );
-	result = result * n + ( 1. / FACTORIAL( 7 ) );
-	result = result * n + ( 1. / FACTORIAL( 6 ) );
-	result = result * n + ( 1. / FACTORIAL( 5 ) );
-	result = result * n + ( 1. / FACTORIAL( 4 ) );
-	result = result * n + ( 1. / FACTORIAL( 3 ) );
-	result *= n * n * n;
-	result += .5 * n * n + n + 1;
-
-	rep( reductions )
-	{
-		result *= result;
-	}
-
-	out( original_x > 0 ) ? result : 1. / result;
+	out( f >= 0. ) ? trunc_f64( f + .5 ) : trunc_f64( f - .5 );
 }
 
-	#define exp( x ) _exp( x )
-
-inl f64 _log( f64 x )
+inl f64 ceil_f64( f64 f )
 {
-	if( x <= 0 ) out - 0;
-
-	s8 expansions = 0;
-
-	as( x < .5 )
-	{
-		if( x < .0625 )
-		{
-			x *= 16.;
-			expansions -= 4;
-		}
-		elif( x < .125 )
-		{
-			x *= 8.;
-			expansions -= 3;
-		}
-		elif( x < .25 )
-		{
-			x *= 4.;
-			expansions -= 2;
-		}
-		else
-		{
-			x *= 2.;
-			expansions--;
-		}
-	}
-
-	as( x >= 2. )
-	{
-		if( x >= 16. )
-		{
-			x /= 16.;
-			expansions += 4;
-		}
-		elif( x >= 8. )
-		{
-			x /= 8.;
-			expansions += 3;
-		}
-		elif( x >= 4. )
-		{
-			x /= 4.;
-			expansions += 2;
-		}
-		else
-		{
-			x /= 2.;
-			expansions++;
-		}
-	}
-
-	f64 y = ( x - 1 ) / ( x + 1 );
-	f64 y2 = y * y;
-
-	f64 result = ( 1. / 13. );
-	result = result * y2 + ( 1. / 11. );
-	result = result * y2 + ( 1. / 9. );
-	result = result * y2 + ( 1. / 7. );
-	result = result * y2 + ( 1. / 5. );
-	result = result * y2 + ( 1. / 3. );
-	result = result * y2 + 1.;
-
-	out( result * y * 2. ) + ( expansions * .6931471805599453 );
+	out( f > 0. and f != trunc_f64( f ) ) ? trunc_f64( f ) + 1. : trunc_f64( f );
 }
-
-	#define log( x ) _log( x )
-
-inl f64 power( in f64 base, in f64 exponent )
-{
-	out exp( exponent * log( base ) );
-}
-
-inl f64 invsqrt( in f64 x )
-{
-	out power( x, -.5 );
-}
-
-inl f64 _sqrt( in f64 x )
-{
-	out power( x, .5 );
-}
-
-	#define sqrt( x ) _sqrt( x )
-
-/*
-f64 sin( f64 x )
-{
-	x = modulo( x, tau ) * .5;
-	f64 x2 = x * x;
-	f64 term = x * x2 * ( 1. / 6. );
-	f64 result = x - term +
-		( term *= x2 * ( 1. / 20. ) ) -
-		( term *= x2 * ( 1. / 42. ) );
-	out( result * result * 2. ) - 1.;
-}
-
-double fmod( double x, double y )
-{
-	if( y == 0.0 )
-	{
-		// Handling division by zero, return NaN
-		return ( x * y ) / ( x * y );
-	}
-
-	double abs_x = abs( x );
-	double abs_y = abs( y );
-	double result = abs_x;
-
-	// Subtracting y until the result is less than y
-	while( result >= abs_y )
-	{
-		result -= abs_y;
-	}
-
-	// Restoring the sign
-	return ( x < 0 ) ? -result : result;
-}
-
-f64 ebsin( f64 x )
-{
-	x = modulo( x, tau ) * 0.5;
-	f64 x2 = x * x;
-	f64 term = x;
-
-	term *= x2 * ( 1. / 6. );
-	f64 result = x - term;
-
-	term *= x2 * ( 1. / 20. );
-	result += term;
-
-	term *= x2 * ( 1. / 42. );
-	result -= term;
-
-	return ( result * result * 2. ) - 1.;
-}*/
-
-inl f64 _cos( f64 x )
-{
-	x = modulo( x, tau ) * .5;
-	f64 x_sqr = x * x;
-	f64 result =
-		( ( ( ( ( 1. / 362880. ) * x_sqr - ( 1. / 5040. ) ) * x_sqr + ( 1. / 120. ) ) * x_sqr - ( 1. / 6. ) ) * x_sqr + 1. ) * x;
-	out( result * result * -2. ) + 1.;
-}
-
-	#define cos( x ) _cos( x )
-
-	#define tausqr ( tau * tau )
-
-// copyright @ENDESGA 2023
-inl float fast_sin( float x )
-{
-	float px = modulo( x + pi, tau );
-	x = ( px < 0. ) ? ( pi - ( px + tau ) ) : ( pi - px );
-	if( px >= pi )
-	{
-		x += pi_d2;
-		return -( 4. - ( 5. * tausqr ) / ( tausqr + ( 4. * x * x ) ) );
-	}
-	else
-	{
-		x -= pi_d2;
-		return -( ( 5. * tausqr ) / ( tausqr + ( 4. * x * x ) ) - 4. );
-	}
-}
-
-inl double fast_cos2( double x )
-{
-	double px = x;
-	x = ( modulo( abs( x ), tau ) );
-	// x -= ( ( x > 3. * pi_d2 ) ? tau : ( ( x > pi_d2 ) ? ( pi ) : 0 ) );
-	if( x > pi_d2 * 3 ) x -= tau;
-	double dx = x;
-	// if( x > pi_d2 ) x -= pi;
-	x -= ( ( px > pi_d2 ) ? ( pi ) : ( ( x < -pi_d2 ) ? ( -pi ) : ( 0 ) ) );
-	double b = ( 5. * tausqr ) / ( tausqr + ( 4. * x * x ) );
-	return ( px >= pi_d2 or dx <= -pi_d2 ) ? ( 4. - b ) : ( b - 4. );
-}
-
-inl f64 fast_cos( f64 x )
-{
-	out fast_sin( x + pi_d2 );
-}
-
-	#define esin fast_sin
-	#define ecos fast_cos
-
-/*
-fn f64 fast_sin( f64 x )
-{
-	x = modulo( x, tau );
-	f64 px = x;
-	x = x < pi ? x : tau - x;
-	out( ( 16 * x * ( pi - x ) ) / ( 5 * pi * pi - 4 * x * ( pi - x ) ) ) * ( px >= pi ? -1 : 1 );
-}
-
-	#define SCALE 4
-	#define SHIFT 6
-
-static const int32_t cos_table[SCALE] = {
-	32767, 19261, 6394, 0
-};
-
-double zcos(f64 x) {
-	// Scale the input angle
-	int32_t angle = (int32_t)(x * (SCALE / (tau / 4)));
-	angle &= (SCALE * 4 - 1); // Wrap the angle to [0, SCALE*4)
-
-	int32_t y0, y1;
-
-	if (angle < SCALE) {
-		y0 = cos_table[angle];
-		y1 = cos_table[(angle + 1) & (SCALE - 1)];
-	} else if (angle < SCALE * 2) {
-		y0 = cos_table[SCALE - 1 - (angle & (SCALE - 1))];
-		y1 = cos_table[SCALE - 1 - ((angle + 1) & (SCALE - 1))];
-	} else if (angle < SCALE * 3) {
-		y0 = -cos_table[(angle & (SCALE - 1))];
-		y1 = -cos_table[((angle + 1) & (SCALE - 1))];
-	} else {
-		y0 = -cos_table[SCALE - 1 - (angle & (SCALE - 1))];
-		y1 = -cos_table[SCALE - 1 - ((angle + 1) & (SCALE - 1))];
-	}
-
-	// Compute the fractional part of the angle, scaled by 2^SHIFT
-	int32_t frac = (int32_t)(x * (SCALE * 4 * (1 << SHIFT) / tau)) & ((1 << SHIFT) - 1);
-
-	// Interpolate between the table values
-	int32_t y = y0 + ((y1 - y0) * frac >> SHIFT);
-
-	// Convert the result to floating-point
-	return y / (double)(1 << 16);
-}
-
-double esin( double x)
-{
-	return zcos(x);
-}
-
-/ *f64 sin( f64 x )
-{
-	double pi_half = pi / 2.0;
-	double a, result;
-
-	// Normalize x to [0, 2*pi]
-	x = modulo(x, 2.0 * pi);
-
-	// Divide the circle into quarters
-	if (x < pi_half) {
-		a = x / pi_half;
-		result = 1.405284735 * a - 0.405284735 * a * a * a;
-	} else if (x < pi) {
-		a = (pi - x) / pi_half;
-		result = 1.405284735 * a - 0.405284735 * a * a * a;
-	} else if (x < 3.0 * pi_half) {
-		a = (x - pi) / pi_half;
-		result = -1.405284735 * a + 0.405284735 * a * a * a;
-	} else {
-		a = (2.0 * pi - x) / pi_half;
-		result = -1.405284735 * a + 0.405284735 * a * a * a;
-	}
-
-	return result;
-}* /
-
-double sin2( double x )
-{
-	/ *double a, result;
-
-	// Normalize x to [0, 2*pi]
-	x = modulo( x, 2.0 * pi );
-
-	//f64 M_PI = pi * .5;
-
-	// 1st quadrant: [0, pi/2]
-	if( x < M_PI / 2.0 )
-	{
-		a = x / M_PI;
-		result = a * a * ( 3.0 - 2.0 * a );
-	}
-	// 2nd quadrant: [pi/2, pi]
-	else if( x < M_PI )
-	{
-		x = M_PI - x; // Reflect x around pi/2
-		a = x / M_PI;
-		result = a * a * ( 3.0 - 2.0 * a );
-	}
-	// 3rd quadrant: [pi, 3*pi/2]
-	else if( x < 1.5 * M_PI )
-	{
-		x -= M_PI; // Shift to start from 0
-		a = x / M_PI;
-		result = -( a * a * ( 3.0 - 2.0 * a ) );
-	}
-	// 4th quadrant: [3*pi/2, 2*pi]
-	else
-	{
-		x = 2.0 * M_PI - x; // Reflect x around 3*pi/2
-		a = x / M_PI;
-		result = -( a * a * ( 3.0 - 2.0 * a ) );
-	}
-
-	return result;* /
-}
-
-fn f64 ecos( in f64 x )
-{
-	out esin( x + pi_d2 );
-}*/
-
-inl f64 _sin( in f64 x )
-{
-	out cos( x + pi_d2 );
-}
-
-	#define sin( x ) _sin( x )
-
-inl f64 _tan( in f64 x )
-{
-	out sin( x ) / cos( x );
-}
-
-	#define tan( x ) _tan( x )
-
-inl f64 atan( in f64 x )
-{
-	if( x > 1.0 )
-	{
-		return pi_d2 - atan( 1 / x );
-	}
-	else if( x < -1.0 )
-	{
-		return -pi_d2 - atan( 1 / x );
-	}
-
-	double sum = x;
-	double term = x;
-	double xsquared = x * x;
-	double denominator = 1.0;
-
-	for( int i = 0; i < 10; i++ )
-	{
-		term *= xsquared;
-		denominator += 2.0;
-		sum -= term / denominator;
-		term *= xsquared;
-		denominator += 2.0;
-		sum += term / denominator;
-	}
-
-	return sum;
-}
-
-inl f64 atan2( in f64 y, in f64 x )
-{
-	if( x > 0 ) out atan( y / x ) + pi_d2;
-	if( y >= 0 and x < 0 ) out atan( y / x ) + pi + pi_d2;
-	if( y < 0 and x < 0 ) out atan( y / x ) - pi_d2;
-	if( x == 0 and y != 0 ) out( y > 0 ) ? pi : 0;
-	out 0.0;
-}
-
-inl f64 angle_diff( in f64 a, in f64 b )
-{
-	double diff = modulo( b - a, tau );
-
-	if( diff > pi )
-	{
-		diff -= tau;
-	}
-	elif( diff < -pi )
-	{
-		diff += tau;
-	}
-
-	return diff;
-}
-
-/*
-fn f64 sinh( in f64 x )
-{
-	out .5 * ( exp( x ) - exp( -x ) );
-}
-
-fn f64 cosh( in f64 x )
-{
-	out .5 * ( exp( x ) + exp( -x ) );
-}
-#define cosh( x ) _cosh( x )
-
-fn f64 _tanh( in f64 x )
-{
-	out sinh( x ) / cosh( x );
-}
-#define tanh( x ) _tanh( x )*/
 
 //
 
@@ -873,30 +444,16 @@ make_type( __gnuc_va_list ) va_list;
 
 /// mem
 
-	#if OS_WINDOWS
-		#define allocate_mem( bytes ) VirtualAlloc( null, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE )
-		#define free_mem( p ) VirtualFree( p, 0, MEM_RELEASE )
-	#elif OS_LINUX
-		#define allocate_mem( bytes ) mmap( null, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0 )
-		#define free_mem( p ) munmap( p, size_( p ) )
-	#endif
+	#define assign_mem( bytes ) calloc( 1, bytes )
+	#define free_mem( p ) free( p )
 
-	#define new_mem( type, n ) to( ptr( type ), allocate_mem( n* size_( type ) ) )
+	#define new_mem( type, n ) to( ptr( type ), calloc( n, size_( type ) ) )
 
 inl ptr( pure ) copy_mem( ptr( pure ) dst, in ptr( pure ) src, u64 n )
 {
-	ptr( u64 ) dl = ( ptr( u64 ) )dst;
-	ptr( u64 ) sl = ( ptr( u64 ) )src;
-	as( n >= size_u64 )
-	{
-		val( dl )++ = val( sl )++;
-		n -= size_u64;
-	}
-
-	ptr( u8 ) d8 = ( ptr( u8 ) )dl;
-	ptr( u8 ) s8 = ( ptr( u8 ) )sl;
+	ptr( u8 ) d8 = dst;
+	ptr( u8 ) s8 = src;
 	as( n-- ) val( d8 )++ = val( s8 )++;
-
 	out dst;
 }
 
@@ -961,34 +518,7 @@ inl u64 text_length( in text str )
 inl text copy_text( text in_dst, text in_text )
 {
 	if( !in_text or !val( in_text ) ) out in_dst;
-
-	ptr( u64 ) src_word;
-	ptr( u64 ) dst_word;
-	text src_byte;
-	text dst_byte;
-	u32 n = text_length( in_text );
-
-	as( ( ( u64 )in_text & ( size_u64 - 1 ) ) and n )
-	{
-		*in_dst++ = *in_text++;
-		n--;
-	}
-
-	src_word = to( ptr( u64 ), in_text );
-	dst_word = to( ptr( u64 ), in_dst );
-	as( n >= size_u64 )
-	{
-		*dst_word++ = *src_word++;
-		n -= size_u64;
-	}
-
-	src_byte = to( text, src_word );
-	dst_byte = to( text, dst_word );
-	as( n-- )
-	{
-		*dst_byte++ = *src_byte++;
-	}
-
+	copy_mem( in_dst, in_text, text_length( in_text ) );
 	out in_dst;
 }
 
@@ -1015,109 +545,18 @@ inl text flip_text( in text in_text, in u32 in_length )
 	out in_text;
 }
 
-inl text int_to_text( s32 in_int )
-{
-	flag isNegative = no;
-
-	// Check if the number is negative
-	if( in_int < 0 )
-	{
-		isNegative = yes;
-		in_int = -in_int;
-	}
-
-	int length = 0;
-
-	// Calculate the length of the resulting string
-	int temp = in_int;
-	do {
-		temp /= 10;
-		length++;
-	}
-	as( temp != 0 );
-
-	if( isNegative )
-	{
-		length++; // Increment length to accommodate the '-' sign
-	}
-
-	// Allocate memory for the string
-	char* str = new_mem( char, length + 1 ); // new_text("",length);//(char*)malloc((length + 1) * sizeof(char));
-
-	// Handle memory allocation failure
-	if( str == NULL )
-	{
-		// perror("Memory allocation failed");
-		// exit(EXIT_FAILURE);
-	}
-
-	// Convert the integer to string starting from the end
-	int index = length - 1;
-	do {
-		str[ index-- ] = abs( in_int % 10 ) + '0';
-		in_int /= 10;
-	}
-	as( in_int != 0 );
-
-	// Add the negative sign if the number was negative
-	if( isNegative )
-	{
-		str[ 0 ] = '-';
-	}
-
-	// Null-terminate the string
-	str[ length ] = '\0';
-
-	return str;
-}
-
-inl text va_format_text( in text in_formatted_text, va_list in_args )
-{
-	text temp_text = assign_text( 512 );
-	text text_ptr = temp_text;
-	text formatted_ptr = in_formatted_text;
-
-	as( val( formatted_ptr ) != '\0' )
-	{
-		if( val( formatted_ptr ) != '%' )
-		{
-			val( text_ptr )++ = val( formatted_ptr );
-		}
-		else
-		{
-			formatted_ptr++;
-			with( val( formatted_ptr ) )
-			{
-				is( 's' )
-				{
-					text arg_text = va_arg( in_args, text );
-					copy_text( text_ptr, arg_text );
-					text_ptr += text_length( arg_text );
-					skip;
-				}
-
-				is( 'd' )
-				{
-					s32 arg_int = va_arg( in_args, s32 );
-					text arg_text = int_to_text( arg_int );
-					copy_text( text_ptr, arg_text );
-					text_ptr += text_length( arg_text );
-					skip;
-				}
-			}
-		}
-		formatted_ptr++;
-	}
-	out temp_text;
-}
-
 inl text format_text( in text in_formatted_text, ... )
 {
 	va_list args;
 	va_start( args, in_formatted_text );
-	text temp_text = va_format_text( in_formatted_text, args );
+	s32 len = vsnprintf( null, 0, in_formatted_text, args );
 	va_end( args );
-	out temp_text;
+	if( len < 0 ) out null;
+	text formatted_text = new_mem( s8, len + 1 );
+	va_start( args, in_formatted_text );
+	vsprintf( formatted_text, in_formatted_text, args );
+	va_end( args );
+	out formatted_text;
 }
 
 flag compare_text( text in_text1, text in_text2 )
@@ -1138,37 +577,6 @@ flag compare_text( text in_text1, text in_text2 )
 }
 
 //
-
-fn print( in text in_formatted_text, ... )
-{
-	va_list args;
-	va_start( args, in_formatted_text );
-	text temp_text = va_format_text( in_formatted_text, args );
-	u64 temp_len = text_length( temp_text );
-	va_end( args );
-
-	if( temp_text > 0 )
-	{
-	#if OS_WINDOWS
-		DWORD written;
-		WriteConsoleA( GetStdHandle( STD_OUTPUT_HANDLE ), temp_text, temp_len, null, null );
-	#elif OS_LINUX
-		s32 result;
-		asm volatile(
-			"mov $1, %%rax\n"
-			"mov $1, %%rdi\n"
-			"mov %0, %%rsi\n"
-			"mov %1, %%rdx\n"
-			"syscall\n"
-			:
-			: "r"( temp_text ), "r"( temp_len )
-			: "rax", "rdi", "rsi", "rdx"
-		);
-	#endif
-	}
-
-	free_text( temp_text );
-}
 
 global text NL = "\n";
 	#define print_nl print( NL )
@@ -1193,69 +601,6 @@ global text NL = "\n";
 		print( "TRACE: " __VA_ARGS__ ); \
 		print_nl;                       \
 		DEF_END
-
-//
-
-flag system_command( text command )
-{
-	#if OS_WINDOWS
-	STARTUPINFO si;
-	PROCESS_INFORMATION _pri;
-
-	ZeroMemory( ref( si ), size_( si ) );
-	si.cb = size_( si );
-	ZeroMemory( ref( _pri ), size_( _pri ) );
-
-	flag result = CreateProcess(
-		NULL,
-		command,
-		NULL,
-		NULL,
-		FALSE,
-		0,
-		NULL,
-		NULL,
-		ref( si ),
-		ref( _pri )
-	);
-
-	if( result )
-	{
-		WaitForSingleObject( _pri.hProcess, INFINITE );
-
-		CloseHandle( _pri.hProcess );
-		CloseHandle( _pri.hThread );
-	}
-
-	out not to_flag( result );
-	#elif OS_LINUX
-	pid_t pid = fork();
-
-	if( pid < 0 )
-	{
-		out no;
-	}
-	elif( pid == 0 )
-	{
-		text args[] = { "/bin/sh", "-c", command, null };
-		execvp( args[ 0 ], args );
-		out yes;
-	}
-	else
-	{
-		s32 status;
-		waitpid( pid, ref( status ), 0 );
-		if( WIFEXITED( status ) )
-		{
-			out WEXITSTATUS( status );
-		}
-		else
-		{
-			out no;
-		}
-	}
-	#endif
-}
 
 	//
 
@@ -1287,7 +632,7 @@ flag system_command( text command )
 
 	// increment
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_inc( safe_ptr ) _InterlockedIncrement8( to( safe ptr( s8 ), safe_ptr ) )
+		#define safe_s8_ptr_inc( safe_ptr ) _InterlockedIncrement( to( safe ptr( s8 ), safe_ptr ) )
 		#define safe_s16_ptr_inc( safe_ptr ) _InterlockedIncrement16( to( safe ptr( s16 ), safe_ptr ) )
 		#define safe_s32_ptr_inc( safe_ptr ) _InterlockedIncrement( to( safe ptr( long ), safe_ptr ) )
 		#define safe_s64_ptr_inc( safe_ptr ) _InterlockedIncrement64( to( safe ptr( s64 ), safe_ptr ) )
@@ -1300,7 +645,7 @@ flag system_command( text command )
 
 	// decrement
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_dec( safe_ptr ) _InterlockedDecrement8( to( safe ptr( s8 ), safe_ptr ) )
+		#define safe_s8_ptr_dec( safe_ptr ) _InterlockedDecrement( to( safe ptr( s8 ), safe_ptr ) )
 		#define safe_s16_ptr_dec( safe_ptr ) _InterlockedDecrement16( to( safe ptr( s16 ), safe_ptr ) )
 		#define safe_s32_ptr_dec( safe_ptr ) _InterlockedDecrement( to( safe ptr( long ), safe_ptr ) )
 		#define safe_s64_ptr_dec( safe_ptr ) _InterlockedDecrement64( to( safe ptr( s64 ), safe_ptr ) )
@@ -1359,7 +704,6 @@ make_union( safe_64 )
 	ptr( pure ) p;
 };
 
-	// macros for unsigned integers
 	#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, create( union( safe_8 ), .u = set_value ).s )
 	#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, create( union( safe_16 ), .u = set_value ).s )
 	#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, create( union( safe_32 ), .u = set_value ).s )
@@ -1402,6 +746,9 @@ make_union( safe_64 )
 	#define safe_ptr_set( safe_ptr, set_value ) safe_s64_set( safe_ptr, set_value )
 	#define safe_ptr_get( safe_ptr ) safe_s64_get( safe_ptr )
 
+	#define safe_flag_get( safe_var ) safe_u8_get( safe_var )
+	#define safe_flag_set( safe_var, set_value ) safe_u8_set( safe_var, set_value )
+
 // spinlock type
 make_type( safe s8 ) spinlock;
 
@@ -1423,7 +770,7 @@ make_struct( list )
 };
 make_ptr( struct( list ) ) list;
 
-	#define iter_list( _, var ) iter( _->size, var )
+	#define iter_list( _, var ) iter( safe_u32_get(_->size), var )
 
 inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, in ptr( pure ) in_data )
 {
@@ -1443,33 +790,31 @@ inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, i
 	#define lock_list( _ ) engage_spinlock( _->lock )
 	#define unlock_list( _ ) vacate_spinlock( _->lock )
 
-	#define list_alloc( _ )                                                      \
-		DEF_START                                                                  \
-		if( _->size == _->size_mem )                                               \
-		{                                                                          \
-			s32 temp_new_size_mem = to_s32( _->size_mem << 1 );                      \
-			ptr( pure ) new_data = allocate_mem( temp_new_size_mem * _->size_type ); \
-			copy_mem( new_data, _->data, _->size * _->size_type );                   \
-			free_mem( _->data );                                                     \
-			_->size_mem = temp_new_size_mem;                                         \
-			_->data = new_data;                                                      \
-		}                                                                          \
+	#define list_assign( _ )                                             \
+		DEF_START                                                          \
+		as( _->size >= _->size_mem )                                       \
+		{                                                                  \
+			_->size_mem = to_s32( _->size_mem << 1 );                        \
+			ptr( pure ) new_data = assign_mem( _->size_mem * _->size_type ); \
+			copy_mem( new_data, _->data, _->size * _->size_type );           \
+			free_mem( _->data );                                             \
+			_->data = new_data;                                              \
+		}                                                                  \
 		DEF_END
 
 	#define list_set( _, type, pos, val ) ( to( ptr( type ), _->data ) )[ ( pos ) ] = ( val )
 
 	#define list_add( _, type, val )           \
 		DEF_START                                \
-		list_alloc( _ );                         \
+		list_assign( _ );                        \
 		list_set( _, type, _->size++, ( val ) ); \
 		DEF_END
 
-	#define list_safe_add( _, type, val )      \
-		DEF_START                                \
-		lock_list( _ );                          \
-		list_alloc( _ );                         \
-		list_set( _, type, _->size++, ( val ) ); \
-		unlock_list( _ );                        \
+	#define list_safe_add( _, type, val ) \
+		DEF_START                           \
+		lock_list( _ );                     \
+		list_add( _, type, val );           \
+		unlock_list( _ );                   \
 		DEF_END
 
 	#define list_shift( _, n ) \
@@ -1480,7 +825,7 @@ inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, i
 
 	#define list_insert( _, type, pos, val )               \
 		DEF_START                                            \
-		list_alloc( _ );                                     \
+		list_assign( _ );                                    \
 		list_move( _, ( pos ), _->size - ( pos ), 1 );       \
 		( to( ptr( type ), _->data ) )[ ( pos ) ] = ( val ); \
 		++( _ )->size;                                       \
@@ -1520,7 +865,7 @@ make_struct( pile )
 struct_pile;
 make_ptr( struct( pile ) ) pile;
 
-	#define iter_pile( _, var ) iter( _->data->size, var )
+	#define iter_pile( _, var ) iter( safe_u32_get(_->data->size), var )
 
 inl pile __new_pile( in list in_list )
 {
@@ -1554,6 +899,13 @@ inl pile __new_pile( in list in_list )
 		}                                                    \
 		DEF_END
 
+	#define pile_safe_add( _, type, val ) \
+		DEF_START                           \
+		lock_pile( _ );                     \
+		pile_add( _, type, val );           \
+		unlock_pile( _ );                   \
+		DEF_END
+
 	#define pile_find( _, type, pos ) validate_maybe( ref( list_get( _->data, type, pos ) ) )
 
 	#define pile_delete( _, pos )                              \
@@ -1561,6 +913,13 @@ inl pile __new_pile( in list in_list )
 		_->size--;                                               \
 		list_add( _->data_free, u32, pos );                      \
 		list_set( _->data, u8, pos * _->data->size_type, 0x0u ); \
+		DEF_END
+
+	#define pile_safe_delete( _, pos ) \
+		DEF_START                        \
+		lock_pile( _ );                  \
+		pile_delete( _, pos );           \
+		unlock_pile( _ );                \
 		DEF_END
 
 	#define free_pile( _ )       \
@@ -1587,13 +946,61 @@ make_type( struct( rgba ) ) rgba;
 
 //
 
+/// random
+
+	#define _heptaplex_collapse( TYPE, SHIFT )                                      \
+		TYPE random_##TYPE( TYPE x, TYPE y, TYPE z )                                  \
+		{                                                                             \
+			x = ~( ~x - y - z ) * ~( x - ~y - z ) * ~( x - y - ~z );                    \
+			y = ~( ~x - y - z ) * ~( x - ~y - z ) * ~( x - y - ~z );                    \
+			z = x ^ y ^ ( ~( ~x - y - z ) * ~( x - ~y - z ) * ~( x - y - ~z ) );        \
+			out z ^ ~( ~z >> SHIFT );                                                   \
+		}                                                                             \
+                                                                                  \
+		TYPE random_range_##TYPE( TYPE in_min, TYPE in_max )                          \
+		{                                                                             \
+			once TYPE x = 1, y = 2, z = 3;                                              \
+			out in_min + ( random_##TYPE( x++, y++, z++ ) mod( in_max - in_min + 1 ) ); \
+		}
+
+_heptaplex_collapse( u8, 4 );
+_heptaplex_collapse( s8, 4 );
+_heptaplex_collapse( u16, 8 );
+_heptaplex_collapse( s16, 8 );
+_heptaplex_collapse( u32, 16 );
+_heptaplex_collapse( s32, 16 );
+_heptaplex_collapse( u64, 32 );
+_heptaplex_collapse( s64, 32 );
+
+f32 noise_f32()
+{
+	once s32 x = 1, y = 2, z = 3;
+	out random_s32( x++, y++, z++ ) / to_f32( 0x7fffffffu );
+}
+
+f64 noise_f64()
+{
+	once s32 x = 1, y = 2, z = 3;
+	out random_s64( x++, y++, z++ ) / to_f64( 0x7fffffffffffffffu );
+}
+
 /// vectors
 
 // float
 
 make_struct( fvec2 )
 {
-	f32 x, y;
+	make_union()
+	{
+		make_struct()
+		{
+			f32 x, y;
+		};
+		make_struct()
+		{
+			f32 w, h;
+		};
+	};
 };
 	#define to_struct_fvec2( _ ) ( to( struct( fvec2 ), _ ) )
 	#define size_struct_fvec2 ( size_( struct( fvec2 ) ) )
@@ -1601,7 +1008,17 @@ make_struct( fvec2 )
 
 make_struct( fvec3 )
 {
-	f32 x, y, z;
+	make_union()
+	{
+		make_struct()
+		{
+			f32 x, y, z;
+		};
+		make_struct()
+		{
+			f32 w, h, d;
+		};
+	};
 };
 	#define to_struct_fvec3( _ ) ( to( struct( fvec3 ), _ ) )
 	#define size_struct_fvec3 ( size_( struct( fvec3 ) ) )
@@ -1619,7 +1036,17 @@ make_struct( fvec4 )
 
 make_struct( svec2 )
 {
-	s32 x, y;
+	make_union()
+	{
+		make_struct()
+		{
+			s32 x, y;
+		};
+		make_struct()
+		{
+			s32 w, h;
+		};
+	};
 };
 	#define to_struct_svec2( _ ) ( to( struct( svec2 ), _ ) )
 	#define size_struct_svec2 ( size_( struct( svec2 ) ) )
@@ -1627,7 +1054,17 @@ make_struct( svec2 )
 
 make_struct( svec3 )
 {
-	s32 x, y, z;
+	make_union()
+	{
+		make_struct()
+		{
+			s32 x, y, z;
+		};
+		make_struct()
+		{
+			s32 w, h, d;
+		};
+	};
 };
 	#define to_struct_svec3( _ ) ( to( struct( svec3 ), _ ) )
 	#define size_struct_svec3 ( size_( struct( svec3 ) ) )
@@ -1645,15 +1082,36 @@ make_struct( svec4 )
 
 make_struct( uvec2 )
 {
-	u32 x, y;
+	make_union()
+	{
+		make_struct()
+		{
+			u32 x, y;
+		};
+		make_struct()
+		{
+			u32 w, h;
+		};
+	};
 };
+
 	#define to_struct_uvec2( _ ) ( to( struct( uvec2 ), _ ) )
 	#define size_struct_uvec2 ( size_( struct( uvec2 ) ) )
 	#define create_struct_uvec2( x, y ) create( struct( uvec2 ), x, y )
 
 make_struct( uvec3 )
 {
-	u32 x, y, z;
+	make_union()
+	{
+		make_struct()
+		{
+			u32 x, y, z;
+		};
+		make_struct()
+		{
+			u32 w, h, d;
+		};
+	};
 };
 	#define to_struct_uvec3( _ ) ( to( struct( uvec3 ), _ ) )
 	#define size_struct_uvec3 ( size_( struct( uvec3 ) ) )
