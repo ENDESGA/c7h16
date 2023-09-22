@@ -33,7 +33,6 @@
 		#define OS_WINDOWS 1
 		#define FARPROC WINDOWS_FARPROC
 		#include <windows.h>
-		#undef FARPROC
 	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 		#undef OS_LINUX
 		#define OS_LINUX 1
