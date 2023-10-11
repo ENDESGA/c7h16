@@ -16,22 +16,23 @@
 */
 
 #pragma once
-#ifndef C7H16_H
-	#define C7H16_H
+#ifndef c7h16_included
+	#define c7h16_included
 
 	#define OS_LINUX 0
 	#define OS_WINDOWS 0
 	#define OS_MACOS 0
 	#define OS_OTHER 0
 
-	#include <stdlib.h>
-	#include <stdio.h>
-	#include <math.h>
-
 	#if defined( __WIN32__ ) || defined( WIN32 ) || defined( _WIN32 ) || defined( __CYGWIN__ ) || defined( __MINGW32__ ) || defined( __WINDOWS__ ) || defined( _WIN64 )
 		#undef OS_WINDOWS
 		#define OS_WINDOWS 1
-		#define FARPROC WINDOWS_FARPROC
+		#define _CRT_SECURE_NO_WARNINGS
+		#undef UNICODE
+		#undef _UNICODE
+		#define WIN32_LEAN_AND_MEAN
+		#define VC_EXTRALEAN
+		#define NOGDICAPMASKS
 		#include <windows.h>
 	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 		#undef OS_LINUX
@@ -66,6 +67,11 @@
 	#else
 		#define COMPILER_OTHER
 	#endif
+
+	#include <stdlib.h>
+	#include <stdio.h>
+	#include <math.h>
+	#include <string.h>
 
 //
 
@@ -301,7 +307,7 @@ make_type( int ) s32;
 	#define size_s32 ( size_( s32 ) )
 	#define s32_min ( -2147483648 )
 	#define s32_max ( 2147483647 )
-	#define print_s32( _ ) print( "%d", to_s32( _ ) )
+#define print_s32( _ ) print( #_ ": %d\n", to_s32( _ ) )
 
 make_type( long long int ) s64;
 	#define to_s64( _ ) ( to( s64, _ ) )
@@ -407,7 +413,7 @@ fn sleep_ns( u64 ns )
 //
 
 /// maybe
-
+/*
 make_struct( maybe )
 {
 	flag valid;
@@ -418,7 +424,7 @@ make_type( struct( maybe ) ) maybe;
 inl maybe validate_maybe( ptr( pure ) in_val )
 {
 	out( maybe ){ .valid = ( ( val( to( ptr( u64 ), in_val ) ) == 0 ) ? no : yes ), .value = val( to( ptr( u64 ), in_val ) ) };
-}
+}*/
 
 //
 
@@ -441,14 +447,14 @@ make_type( __gnuc_va_list ) va_list;
 
 //
 
-/// mem
+/// ptr
 
-	#define assign_mem( bytes ) calloc( 1, bytes )
-	#define free_mem( p ) free( p )
+	#define assign_ptr( bytes ) calloc( 1, bytes )
+	#define delete_ptr( p ) if(p != null) free( p )
 
-	#define new_mem( type, n ) to( ptr( type ), calloc( n, size_( type ) ) )
+	#define new_ptr( type, n ) to( ptr( type ), calloc( n, size_( type ) ) )
 
-inl ptr( pure ) copy_mem( ptr( pure ) dst, in ptr( pure ) src, u64 n )
+inl ptr( pure ) copy_ptr( ptr( pure ) dst, in ptr( pure ) src, u64 n )
 {
 	ptr( u8 ) d8 = dst;
 	ptr( u8 ) s8 = src;
@@ -472,11 +478,54 @@ make_type( ptr( s8 ) ) text;
 	#define to_text( _ ) to( text, _ )
 	#define size_text ( size_( text ) )
 
-	#define assign_text( SIZE ) new_mem( s8, SIZE )
-	#define new_text( default_text, extra_char_mem ) copy_mem( assign_text( text_length( default_text ) + ( extra_char_mem ) + 1 ), default_text, text_length( default_text ) )
-	#define free_text( _ ) \
-		if( _ != null ) free_mem( _ )
-	#define print_text( _ ) print( "%s", text( _ ) )
+#define text_length( TEXT ) (strlen( TEXT ) + 1)
+#define copy_text( TEXT_DST, TEXT_SRC ) strcpy(TEXT_DST, TEXT_SRC)
+#define join_text( TEXT_DST, TEXT_SRC ) strcat(TEXT_DST, TEXT_SRC)
+#define end_text( TEXT ) join_text(TEXT, "\0")
+#define compare_text( TEXT_A, TEXT_B ) (strcmp(TEXT_A, TEXT_B) == 0)
+
+	#define assign_text( SIZE ) new_ptr( s8, SIZE )
+	#define new_text( DEFAULT_TEXT, EXTRA_CHARS ) copy_text( assign_text( text_length( DEFAULT_TEXT ) + ( EXTRA_CHARS)), DEFAULT_TEXT )
+	#define delete_text( _ ) \
+		if( _ != null ) delete_ptr( _ )
+	#define print_text( _ ) print( "%s", _ )
+
+inl text flip_text( in text in_text, in u32 in_length )
+{
+	iter( in_length >> 1, i )
+	{
+		u32 j = in_length - i - 1;
+		in_text[ i ] ^= in_text[ j ];
+		in_text[ j ] ^= in_text[ i ];
+		in_text[ i ] ^= in_text[ j ];
+	}
+	out in_text;
+}
+
+inl text format_text( in text in_formatted_text, ... )
+{
+	va_list args;
+	va_start( args, in_formatted_text );
+	s32 len = vsnprintf( null, 0, in_formatted_text, args );
+	va_end( args );
+	if( len < 0 ) out null;
+	text formatted_text = new_ptr( s8, len + 1 );
+	va_start( args, in_formatted_text );
+	vsnprintf( formatted_text, len + 1, in_formatted_text, args );
+	va_end( args );
+	out formatted_text;
+}
+
+/*
+make_type( ptr( s8 ) ) text;
+	#define to_text( _ ) to( text, _ )
+	#define size_text ( size_( text ) )
+
+	#define assign_text( SIZE ) new_ptr( s8, SIZE + 2 )
+	#define new_text( DEFAULT_TEXT, EXTRA_CHARS ) copy_ptr( assign_text( text_length( DEFAULT_TEXT ) + ( EXTRA_CHARS )), DEFAULT_TEXT, text_length( DEFAULT_TEXT ) )
+	#define delete_text( _ ) \
+		if( _ != null ) delete_ptr( _ )
+	#define print_text( _ ) print( "%s", _ )
 
 inl u64 text_length( in text str )
 {
@@ -517,7 +566,7 @@ inl u64 text_length( in text str )
 inl text copy_text( text in_dst, text in_text )
 {
 	if( !in_text or !val( in_text ) ) out in_dst;
-	copy_mem( in_dst, in_text, text_length( in_text ) );
+	copy_ptr( in_dst, in_text, text_length( in_text ) );
 	out in_dst;
 }
 
@@ -551,9 +600,9 @@ inl text format_text( in text in_formatted_text, ... )
 	s32 len = vsnprintf( null, 0, in_formatted_text, args );
 	va_end( args );
 	if( len < 0 ) out null;
-	text formatted_text = new_mem( s8, len + 1 );
+	text formatted_text = new_ptr( s8, len + 1 );
 	va_start( args, in_formatted_text );
-	vsprintf( formatted_text, in_formatted_text, args );
+	vsnprintf( formatted_text, len + 1, in_formatted_text, args );
 	va_end( args );
 	out formatted_text;
 }
@@ -573,12 +622,12 @@ flag compare_text( text in_text1, text in_text2 )
 		in_text2++;
 	}
 	out( ( val( in_text1 ) - val( in_text2 ) ) == 0 );
-}
+}*/
 
 //
 
 global text NL = "\n";
-	#define print_nl print( NL )
+	#define print_nl print_text( NL )
 
 	#define print_debug( ... )        \
 		DEF_START                       \
@@ -590,7 +639,8 @@ global text NL = "\n";
 		DEF_START                         \
 		if( IF_YES )                      \
 		{                                 \
-			print( "ERROR: " __VA_ARGS__ ); \
+			print( "ERROR: "); \
+			print( __VA_ARGS__ ); \
 			print_nl;                       \
 		}                                 \
 		DEF_END
@@ -605,74 +655,74 @@ global text NL = "\n";
 
 	// set
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_set( safe_ptr, set_value ) _InterlockedExchange8( to( safe ptr( s8 ), safe_ptr ), to( s8, set_value ) )
-		#define safe_s16_ptr_set( safe_ptr, set_value ) _InterlockedExchange16( to( safe ptr( s16 ), safe_ptr ), to( s16, set_value ) )
-		#define safe_s32_ptr_set( safe_ptr, set_value ) _InterlockedExchange( to( safe ptr( long ), safe_ptr ), to( long, set_value ) )
-		#define safe_s64_ptr_set( safe_ptr, set_value ) _InterlockedExchange64( to( safe ptr( s64 ), safe_ptr ), to( s64, set_value ) )
+		#define safe_s8_ptr_set( PTR, VALUE ) _InterlockedExchange8( to( safe ptr( s8 ), PTR ), to( s8, VALUE ) )
+		#define safe_s16_ptr_set( PTR, VALUE ) _InterlockedExchange16( to( safe ptr( s16 ), PTR ), to( s16, VALUE ) )
+		#define safe_s32_ptr_set( PTR, VALUE ) _InterlockedExchange( to( safe ptr( long ), PTR ), to( long, VALUE ) )
+		#define safe_s64_ptr_set( PTR, VALUE ) _InterlockedExchange64( to( safe ptr( s64 ), PTR ), to( s64, VALUE ) )
 	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s16_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s32_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
-		#define safe_s64_ptr_set( safe_ptr, set_value ) ( atomic_exchange( ( safe_ptr ), ( set_value ) ) )
+		#define safe_s8_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
+		#define safe_s16_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
+		#define safe_s32_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
+		#define safe_s64_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
 	#endif
 
 	// get
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_get( safe_ptr ) _InterlockedOr8( to( safe ptr( s8 ), safe_ptr ), 0 )
-		#define safe_s16_ptr_get( safe_ptr ) _InterlockedOr16( to( safe ptr( s16 ), safe_ptr ), 0 )
-		#define safe_s32_ptr_get( safe_ptr ) _InterlockedOr( to( safe ptr( long ), safe_ptr ), 0 )
-		#define safe_s64_ptr_get( safe_ptr ) _InterlockedOr64( to( safe ptr( s64 ), safe_ptr ), 0 )
+		#define safe_s8_ptr_get( PTR ) _InterlockedOr8( to( safe ptr( s8 ), PTR ), 0 )
+		#define safe_s16_ptr_get( PTR ) _InterlockedOr16( to( safe ptr( s16 ), PTR ), 0 )
+		#define safe_s32_ptr_get( PTR ) _InterlockedOr( to( safe ptr( long ), PTR ), 0 )
+		#define safe_s64_ptr_get( PTR ) _InterlockedOr64( to( safe ptr( s64 ), PTR ), 0 )
 	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s16_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s32_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
-		#define safe_s64_ptr_get( safe_ptr ) ( atomic_load( ( safe_ptr ) ) )
+		#define safe_s8_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
+		#define safe_s16_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
+		#define safe_s32_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
+		#define safe_s64_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
 	#endif
 
 	// increment
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_inc( safe_ptr ) _InterlockedIncrement( to( safe ptr( s8 ), safe_ptr ) )
-		#define safe_s16_ptr_inc( safe_ptr ) _InterlockedIncrement16( to( safe ptr( s16 ), safe_ptr ) )
-		#define safe_s32_ptr_inc( safe_ptr ) _InterlockedIncrement( to( safe ptr( long ), safe_ptr ) )
-		#define safe_s64_ptr_inc( safe_ptr ) _InterlockedIncrement64( to( safe ptr( s64 ), safe_ptr ) )
+		#define safe_s8_ptr_inc( PTR ) _InterlockedIncrement( to( safe ptr( s8 ), PTR ) )
+		#define safe_s16_ptr_inc( PTR ) _InterlockedIncrement16( to( safe ptr( s16 ), PTR ) )
+		#define safe_s32_ptr_inc( PTR ) _InterlockedIncrement( to( safe ptr( long ), PTR ) )
+		#define safe_s64_ptr_inc( PTR ) _InterlockedIncrement64( to( safe ptr( s64 ), PTR ) )
 	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_inc( safe_ptr ) ( atomic_fetch_add( ( safe_ptr ), 1 ) )
-		#define safe_s16_ptr_inc( safe_ptr ) ( atomic_fetch_add( ( safe_ptr ), 1 ) )
-		#define safe_s32_ptr_inc( safe_ptr ) ( atomic_fetch_add( ( safe_ptr ), 1 ) )
-		#define safe_s64_ptr_inc( safe_ptr ) ( atomic_fetch_add( ( safe_ptr ), 1 ) )
+		#define safe_s8_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
+		#define safe_s16_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
+		#define safe_s32_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
+		#define safe_s64_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
 	#endif
 
 	// decrement
 	#ifdef COMPILER_MSVC
-		#define safe_s8_ptr_dec( safe_ptr ) _InterlockedDecrement( to( safe ptr( s8 ), safe_ptr ) )
-		#define safe_s16_ptr_dec( safe_ptr ) _InterlockedDecrement16( to( safe ptr( s16 ), safe_ptr ) )
-		#define safe_s32_ptr_dec( safe_ptr ) _InterlockedDecrement( to( safe ptr( long ), safe_ptr ) )
-		#define safe_s64_ptr_dec( safe_ptr ) _InterlockedDecrement64( to( safe ptr( s64 ), safe_ptr ) )
+		#define safe_s8_ptr_dec( PTR ) _InterlockedDecrement( to( safe ptr( s8 ), PTR ) )
+		#define safe_s16_ptr_dec( PTR ) _InterlockedDecrement16( to( safe ptr( s16 ), PTR ) )
+		#define safe_s32_ptr_dec( PTR ) _InterlockedDecrement( to( safe ptr( long ), PTR ) )
+		#define safe_s64_ptr_dec( PTR ) _InterlockedDecrement64( to( safe ptr( s64 ), PTR ) )
 	#elif defined( COMPILER_GCC )
-		#define safe_s8_ptr_dec( safe_ptr ) ( atomic_fetch_sub( ( safe_ptr ), 1 ) )
-		#define safe_s16_ptr_dec( safe_ptr ) ( atomic_fetch_sub( ( safe_ptr ), 1 ) )
-		#define safe_s32_ptr_dec( safe_ptr ) ( atomic_fetch_sub( ( safe_ptr ), 1 ) )
-		#define safe_s64_ptr_dec( safe_ptr ) ( atomic_fetch_sub( ( safe_ptr ), 1 ) )
+		#define safe_s8_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
+		#define safe_s16_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
+		#define safe_s32_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
+		#define safe_s64_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
 	#endif
 
 //
 
-	#define safe_s8_set( safe_var, set_value ) safe_s8_ptr_set( ref( safe_var ), set_value )
-	#define safe_s16_set( safe_var, set_value ) safe_s16_ptr_set( ref( safe_var ), set_value )
-	#define safe_s32_set( safe_var, set_value ) safe_s32_ptr_set( ref( safe_var ), set_value )
-	#define safe_s64_set( safe_var, set_value ) safe_s64_ptr_set( ref( safe_var ), set_value )
-	#define safe_s8_get( safe_var ) safe_s8_ptr_get( ref( safe_var ) )
-	#define safe_s16_get( safe_var ) safe_s16_ptr_get( ref( safe_var ) )
-	#define safe_s32_get( safe_var ) safe_s32_ptr_get( ref( safe_var ) )
-	#define safe_s64_get( safe_var ) safe_s64_ptr_get( ref( safe_var ) )
-	#define safe_s8_inc( safe_var ) safe_s8_ptr_inc( ref( safe_var ) )
-	#define safe_s16_inc( safe_var ) safe_s16_ptr_inc( ref( safe_var ) )
-	#define safe_s32_inc( safe_var ) safe_s32_ptr_inc( ref( safe_var ) )
-	#define safe_s64_inc( safe_var ) safe_s64_ptr_inc( ref( safe_var ) )
-	#define safe_s8_dec( safe_var ) safe_s8_ptr_dec( ref( safe_var ) )
-	#define safe_s16_dec( safe_var ) safe_s16_ptr_dec( ref( safe_var ) )
-	#define safe_s32_dec( safe_var ) safe_s32_ptr_dec( ref( safe_var ) )
-	#define safe_s64_dec( safe_var ) safe_s64_ptr_dec( ref( safe_var ) )
+	#define safe_s8_set( VAR, VALUE ) safe_s8_ptr_set( ref( VAR ), VALUE )
+	#define safe_s16_set( VAR, VALUE ) safe_s16_ptr_set( ref( VAR ), VALUE )
+	#define safe_s32_set( VAR, VALUE ) safe_s32_ptr_set( ref( VAR ), VALUE )
+	#define safe_s64_set( VAR, VALUE ) safe_s64_ptr_set( ref( VAR ), VALUE )
+	#define safe_s8_get( VAR ) safe_s8_ptr_get( ref( VAR ) )
+	#define safe_s16_get( VAR ) safe_s16_ptr_get( ref( VAR ) )
+	#define safe_s32_get( VAR ) safe_s32_ptr_get( ref( VAR ) )
+	#define safe_s64_get( VAR ) safe_s64_ptr_get( ref( VAR ) )
+	#define safe_s8_inc( VAR ) safe_s8_ptr_inc( ref( VAR ) )
+	#define safe_s16_inc( VAR ) safe_s16_ptr_inc( ref( VAR ) )
+	#define safe_s32_inc( VAR ) safe_s32_ptr_inc( ref( VAR ) )
+	#define safe_s64_inc( VAR ) safe_s64_ptr_inc( ref( VAR ) )
+	#define safe_s8_dec( VAR ) safe_s8_ptr_dec( ref( VAR ) )
+	#define safe_s16_dec( VAR ) safe_s16_ptr_dec( ref( VAR ) )
+	#define safe_s32_dec( VAR ) safe_s32_ptr_dec( ref( VAR ) )
+	#define safe_s64_dec( VAR ) safe_s64_ptr_dec( ref( VAR ) )
 
 //
 
@@ -703,80 +753,80 @@ make_union( safe_64 )
 	ptr( pure ) p;
 };
 
-	#define safe_u8_ptr_set( safe_ptr, set_value ) safe_s8_ptr_set( safe_ptr, create( union( safe_8 ), .u = set_value ).s )
-	#define safe_u16_ptr_set( safe_ptr, set_value ) safe_s16_ptr_set( safe_ptr, create( union( safe_16 ), .u = set_value ).s )
-	#define safe_u32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, create( union( safe_32 ), .u = set_value ).s )
-	#define safe_u64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, create( union( safe_64 ), .u = set_value ).s )
-	#define safe_u8_ptr_get( safe_ptr ) create( union( safe_8 ), .s = safe_s8_ptr_get( safe_ptr ) ).u
-	#define safe_u16_ptr_get( safe_ptr ) create( union( safe_16 ), .s = safe_s16_ptr_get( safe_ptr ) ).u
-	#define safe_u32_ptr_get( safe_ptr ) create( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).u
-	#define safe_u64_ptr_get( safe_ptr ) create( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).u
+	#define safe_u8_ptr_set( PTR, VALUE ) safe_s8_ptr_set( PTR, create( union( safe_8 ), .u = VALUE ).s )
+	#define safe_u16_ptr_set( PTR, VALUE ) safe_s16_ptr_set( PTR, create( union( safe_16 ), .u = VALUE ).s )
+	#define safe_u32_ptr_set( PTR, VALUE ) safe_s32_ptr_set( PTR, create( union( safe_32 ), .u = VALUE ).s )
+	#define safe_u64_ptr_set( PTR, VALUE ) safe_s64_ptr_set( PTR, create( union( safe_64 ), .u = VALUE ).s )
+	#define safe_u8_ptr_get( PTR ) create( union( safe_8 ), .s = safe_s8_ptr_get( PTR ) ).u
+	#define safe_u16_ptr_get( PTR ) create( union( safe_16 ), .s = safe_s16_ptr_get( PTR ) ).u
+	#define safe_u32_ptr_get( PTR ) create( union( safe_32 ), .s = safe_s32_ptr_get( PTR ) ).u
+	#define safe_u64_ptr_get( PTR ) create( union( safe_64 ), .s = safe_s64_ptr_get( PTR ) ).u
 
-	#define safe_u8_set( safe_var, set_value ) safe_s8_set( safe_var, create( union( safe_8 ), .u = set_value ).s )
-	#define safe_u16_set( safe_var, set_value ) safe_s16_set( safe_var, create( union( safe_16 ), .u = set_value ).s )
-	#define safe_u32_set( safe_var, set_value ) safe_s32_set( safe_var, create( union( safe_32 ), .u = set_value ).s )
-	#define safe_u64_set( safe_var, set_value ) safe_s64_set( safe_var, create( union( safe_64 ), .u = set_value ).s )
-	#define safe_u8_get( safe_var ) create( union( safe_8 ), .s = safe_s8_get( safe_var ) ).u
-	#define safe_u16_get( safe_var ) create( union( safe_16 ), .s = safe_s16_get( safe_var ) ).u
-	#define safe_u32_get( safe_var ) create( union( safe_32 ), .s = safe_s32_get( safe_var ) ).u
-	#define safe_u64_get( safe_var ) create( union( safe_64 ), .s = safe_s64_get( safe_var ) ).u
+	#define safe_u8_set( VAR, VALUE ) safe_s8_set( VAR, create( union( safe_8 ), .u = VALUE ).s )
+	#define safe_u16_set( VAR, VALUE ) safe_s16_set( VAR, create( union( safe_16 ), .u = VALUE ).s )
+	#define safe_u32_set( VAR, VALUE ) safe_s32_set( VAR, create( union( safe_32 ), .u = VALUE ).s )
+	#define safe_u64_set( VAR, VALUE ) safe_s64_set( VAR, create( union( safe_64 ), .u = VALUE ).s )
+	#define safe_u8_get( VAR ) create( union( safe_8 ), .s = safe_s8_get( VAR ) ).u
+	#define safe_u16_get( VAR ) create( union( safe_16 ), .s = safe_s16_get( VAR ) ).u
+	#define safe_u32_get( VAR ) create( union( safe_32 ), .s = safe_s32_get( VAR ) ).u
+	#define safe_u64_get( VAR ) create( union( safe_64 ), .s = safe_s64_get( VAR ) ).u
 
-	#define safe_u8_inc( safe_var ) safe_s8_inc( safe_var )
-	#define safe_u16_inc( safe_var ) safe_s16_inc( safe_var )
-	#define safe_u32_inc( safe_var ) safe_s32_inc( safe_var )
-	#define safe_u64_inc( safe_var ) safe_s64_inc( safe_var )
-	#define safe_u8_dec( safe_var ) safe_s8_dec( safe_var )
-	#define safe_u16_dec( safe_var ) safe_s16_dec( safe_var )
-	#define safe_u32_dec( safe_var ) safe_s32_dec( safe_var )
-	#define safe_u64_dec( safe_var ) safe_s64_dec( safe_var )
+	#define safe_u8_inc( VAR ) safe_s8_inc( VAR )
+	#define safe_u16_inc( VAR ) safe_s16_inc( VAR )
+	#define safe_u32_inc( VAR ) safe_s32_inc( VAR )
+	#define safe_u64_inc( VAR ) safe_s64_inc( VAR )
+	#define safe_u8_dec( VAR ) safe_s8_dec( VAR )
+	#define safe_u16_dec( VAR ) safe_s16_dec( VAR )
+	#define safe_u32_dec( VAR ) safe_s32_dec( VAR )
+	#define safe_u64_dec( VAR ) safe_s64_dec( VAR )
 
 	// macros for floating point numbers
-	#define safe_f32_ptr_set( safe_ptr, set_value ) safe_s32_ptr_set( safe_ptr, create( union( safe_32 ), .f = set_value ).s )
-	#define safe_f64_ptr_set( safe_ptr, set_value ) safe_s64_ptr_set( safe_ptr, create( union( safe_64 ), .f = set_value ).s )
-	#define safe_f32_ptr_get( safe_ptr ) create( union( safe_32 ), .s = safe_s32_ptr_get( safe_ptr ) ).f
-	#define safe_f64_ptr_get( safe_ptr ) create( union( safe_64 ), .s = safe_s64_ptr_get( safe_ptr ) ).f
+	#define safe_f32_ptr_set( PTR, VALUE ) safe_s32_ptr_set( PTR, create( union( safe_32 ), .f = VALUE ).s )
+	#define safe_f64_ptr_set( PTR, VALUE ) safe_s64_ptr_set( PTR, create( union( safe_64 ), .f = VALUE ).s )
+	#define safe_f32_ptr_get( PTR ) create( union( safe_32 ), .s = safe_s32_ptr_get( PTR ) ).f
+	#define safe_f64_ptr_get( PTR ) create( union( safe_64 ), .s = safe_s64_ptr_get( PTR ) ).f
 
-	#define safe_f32_set( safe_var, set_value ) safe_s32_set( safe_var, create( union( safe_32 ), .f = set_value ).s )
-	#define safe_f64_set( safe_var, set_value ) safe_s64_set( safe_var, create( union( safe_64 ), .f = set_value ).s )
-	#define safe_f32_get( safe_var ) create( union( safe_32 ), .s = safe_s32_get( safe_var ) ).f
-	#define safe_f64_get( safe_var ) create( union( safe_64 ), .s = safe_s64_get( safe_var ) ).f
+	#define safe_f32_set( VAR, VALUE ) safe_s32_set( VAR, create( union( safe_32 ), .f = VALUE ).s )
+	#define safe_f64_set( VAR, VALUE ) safe_s64_set( VAR, create( union( safe_64 ), .f = VALUE ).s )
+	#define safe_f32_get( VAR ) create( union( safe_32 ), .s = safe_s32_get( VAR ) ).f
+	#define safe_f64_get( VAR ) create( union( safe_64 ), .s = safe_s64_get( VAR ) ).f
 
 	// macros for pointers
-	#define safe_ptr_set( safe_ptr, set_value ) safe_s64_set( safe_ptr, set_value )
-	#define safe_ptr_get( safe_ptr ) safe_s64_get( safe_ptr )
+	#define safe_ptr_set( PTR, VALUE ) safe_s64_set( PTR, VALUE )
+	#define safe_ptr_get( PTR ) safe_s64_get( PTR )
 
-	#define safe_flag_get( safe_var ) safe_u8_get( safe_var )
-	#define safe_flag_set( safe_var, set_value ) safe_u8_set( safe_var, set_value )
+	#define safe_flag_get( VAR ) safe_u8_get( VAR )
+	#define safe_flag_set( VAR, VALUE ) safe_u8_set( VAR, VALUE )
 
 // spinlock type
 make_type( safe s8 ) spinlock;
 
 	// spinlock macros
-	#define engage_spinlock( lock )            \
+	#define engage_spinlock( LOCK )            \
 		DEF_START                                \
-		as( ( safe_s8_set( lock, 1 ) ) == 1 ) {} \
+		as( ( safe_s8_set( LOCK, 1 ) ) == 1 ) {} \
 		DEF_END
 
-	#define vacate_spinlock( lock ) safe_s8_set( lock, 0 )
+	#define vacate_spinlock( LOCK ) safe_s8_set( LOCK, 0 )
 
 //
 
 make_struct( list )
 {
 	spinlock lock;
-	s32 size, size_mem, size_type;
+	s32 size, size_ptr, size_type;
 	ptr( u8 ) data;
 };
 make_ptr( struct( list ) ) list;
 
-	#define iter_list( _, var ) iter( safe_u32_get(_->size), var )
+	#define iter_list( LIST, VAR ) iter( safe_u32_get(LIST->size), VAR )
 
-inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, in ptr( pure ) in_data )
+inl list assign_list( in s32 in_size, in s32 in_size_ptr, in s32 in_size_type, in ptr( pure ) in_data )
 {
-	list temp_list = new_mem( struct( list ), 1 );
+	list temp_list = new_ptr( struct( list ), 1 );
 	//
 	temp_list->size = in_size;
-	temp_list->size_mem = in_size_mem;
+	temp_list->size_ptr = in_size_ptr;
 	temp_list->size_type = in_size_type;
 	temp_list->data = ( ptr( u8 ) )in_data;
 	//
@@ -784,74 +834,82 @@ inl list assign_list( in s32 in_size, in s32 in_size_mem, in s32 in_size_type, i
 }
 
 	#define new_list_data( type, size, data ) assign_list( size, max( 1, size ), size_( type ), to( ptr( pure ), data ) )
-	#define new_list( type ) new_list_data( type, 0, new_mem( u8, size_( type ) ) )
+	#define new_list( type ) new_list_data( type, 0, new_ptr( u8, size_( type ) ) )
 
-	#define lock_list( _ ) engage_spinlock( _->lock )
-	#define unlock_list( _ ) vacate_spinlock( _->lock )
+	#define lock_list( LIST ) engage_spinlock( LIST->lock )
+	#define unlock_list( LIST ) vacate_spinlock( LIST->lock )
 
-	#define list_assign( _ )                                             \
+	#define list_assign( LIST )                                             \
 		DEF_START                                                          \
-		as( _->size >= _->size_mem )                                       \
+		as( LIST->size >= LIST->size_ptr )                                       \
 		{                                                                  \
-			_->size_mem = to_s32( _->size_mem << 1 );                        \
-			ptr( pure ) new_data = assign_mem( _->size_mem * _->size_type ); \
-			copy_mem( new_data, _->data, _->size * _->size_type );           \
-			free_mem( _->data );                                             \
-			_->data = new_data;                                              \
+			LIST->size_ptr = to_s32( LIST->size_ptr << 1 );                        \
+			ptr( pure ) new_data = assign_ptr( LIST->size_ptr * LIST->size_type ); \
+			copy_ptr( new_data, LIST->data, LIST->size * LIST->size_type );           \
+			delete_ptr( safe_ptr_get(LIST->data) );                                             \
+			safe_ptr_set(LIST->data,new_data);                                              \
 		}                                                                  \
 		DEF_END
 
-	#define list_set( _, type, pos, val ) ( to( ptr( type ), _->data ) )[ ( pos ) ] = ( val )
+	#define list_set( LIST, type, pos, val ) ( to( ptr( type ), safe_ptr_get(LIST->data) ) )[ ( pos ) ] = ( val )
 
-	#define list_add( _, type, val )           \
+	#define list_add( LIST, type, val )           \
 		DEF_START                                \
-		list_assign( _ );                        \
-		list_set( _, type, _->size++, ( val ) ); \
+		list_assign( LIST );                        \
+		list_set( LIST, type, LIST->size++, ( val ) ); \
 		DEF_END
 
-	#define list_safe_add( _, type, val ) \
+	#define list_safe_add( LIST, type, val ) \
 		DEF_START                           \
-		lock_list( _ );                     \
-		list_add( _, type, val );           \
-		unlock_list( _ );                   \
+		lock_list( LIST );                     \
+		list_add( LIST, type, val );           \
+		unlock_list( LIST );                   \
 		DEF_END
 
-	#define list_shift( _, n ) \
-		copy_mem( to( ptr( pure ), _->data ), to( ptr( pure ), _->data + ( ( -( n ) ) * _->size_type ) ), ( ( _->size -= abs( n ) ) ) * _->size_type )
+	#define list_shift( LIST, n ) \
+		copy_ptr( to( ptr( pure ), LIST->data ), to( ptr( pure ), LIST->data + ( ( -( n ) ) * LIST->size_type ) ), ( ( LIST->size -= abs( n ) ) ) * LIST->size_type )
 
-	#define list_move( _, start, length, n ) \
-		copy_mem( to( ptr( pure ), _->data + ( ( ( start ) + ( n ) ) * _->size_type ) ), to( ptr( pure ), _->data + ( ( start )*_->size_type ) ), ( length )*_->size_type )
+	#define list_move( LIST, start, length, n ) \
+		copy_ptr( to( ptr( pure ), LIST->data + ( ( ( start ) + ( n ) ) * LIST->size_type ) ), to( ptr( pure ), LIST->data + ( ( start )*LIST->size_type ) ), ( length )*LIST->size_type )
 
-	#define list_insert( _, type, pos, val )               \
+	#define list_insert( LIST, type, pos, val )               \
 		DEF_START                                            \
-		list_assign( _ );                                    \
-		list_move( _, ( pos ), _->size - ( pos ), 1 );       \
-		( to( ptr( type ), _->data ) )[ ( pos ) ] = ( val ); \
-		++( _ )->size;                                       \
+		list_assign( LIST );                                    \
+		list_move( LIST, ( pos ), LIST->size - ( pos ), 1 );       \
+		( to( ptr( type ), LIST->data ) )[ ( pos ) ] = ( val ); \
+		++( LIST )->size;                                       \
 		DEF_END
 
-	#define list_delete( _, pos )                           \
+	#define list_delete( LIST, pos )                           \
 		DEF_START                                             \
-		list_move( _, ( pos ) + 1, _->size - ( pos )-1, -1 ); \
-		--( _ )->size;                                        \
+		list_move( LIST, ( pos ) + 1, LIST->size - ( pos )-1, -1 ); \
+		--( LIST )->size;                                        \
 		DEF_END
 
-	#define list_fill( _, val )                  \
+	#define list_fill( LIST, val )                  \
 		DEF_START                                  \
-		iter( _->size, n ) _->data[ n ] = ( val ); \
+		iter( LIST->size, n ) LIST->data[ n ] = ( val ); \
 		DEF_END
 
-	#define free_list( _ )     \
-		free_mem( ( _ )->data ); \
-		free_mem( _ )
+	#define delete_list( LIST )     \
+		DEF_START\
+		if(LIST == null) skip;\
+		if((LIST)->data == null) skip;\
+		delete_ptr( ( LIST )->data ); \
+		delete_ptr( LIST );\
+		DEF_END\
 
-	#define list_get( _, type, pos ) ( to( ptr( type ), _->data ) )[ ( pos ) ]
+	#define empty_list( LIST )     \
+		LIST->size = 0;
 
-	#define list_pop_front( _, type ) \
-		list_get( _, type, 0 );         \
-		list_shift( _, -1 )
+	#define list_get( LIST, type, pos ) ( to( ptr( type ), LIST->data ) )[ ( pos ) ]
+	#define list_safe_get( LIST, type, pos ) ( to( ptr( type ), safe_ptr_get(LIST->data) ) )[ ( pos ) ]
 
-	#define list_pop_back( _, type ) list_get( _, type, --( _->size ) )
+	#define list_remove_front( LIST, type ) \
+		list_get( LIST, type, 0 );         \
+		list_shift( LIST, -1 )
+
+	#define list_remove_back( LIST, type ) list_get( LIST, type, --( LIST->size ) )
 
 //
 
@@ -868,7 +926,7 @@ make_ptr( struct( pile ) ) pile;
 
 inl pile __new_pile( in list in_list )
 {
-	pile temp_pile = new_mem( struct( pile ), 1 );
+	pile temp_pile = new_ptr( struct( pile ), 1 );
 	//
 	temp_pile->size = 0;
 	temp_pile->prev_pos = 0;
@@ -888,7 +946,7 @@ inl pile __new_pile( in list in_list )
 		_->size++;                                           \
 		if( _->data_free->size )                             \
 		{                                                    \
-			_->prev_pos = list_pop_front( _->data_free, u32 ); \
+			_->prev_pos = list_remove_back( _->data_free, u32 ); \
 			list_set( _->data, type, _->prev_pos, val );       \
 		}                                                    \
 		else                                                 \
@@ -905,27 +963,28 @@ inl pile __new_pile( in list in_list )
 		unlock_pile( _ );                   \
 		DEF_END
 
-	#define pile_find( _, type, pos ) validate_maybe( ref( list_get( _->data, type, pos ) ) )
+	#define pile_find( _, type, pos ) list_get( _->data, type, pos )
+	#define pile_safe_find( _, type, pos ) list_safe_get( _->data, type, pos )
 
-	#define pile_delete( _, pos )                              \
+	#define pile_delete( _, type, pos )                              \
 		DEF_START                                                \
 		_->size--;                                               \
 		list_add( _->data_free, u32, pos );                      \
-		list_set( _->data, u8, pos * _->data->size_type, 0x0u ); \
+		list_set( _->data, type, pos, (type){0} ); \
 		DEF_END
 
-	#define pile_safe_delete( _, pos ) \
+	#define pile_safe_delete( _, type, pos ) \
 		DEF_START                        \
 		lock_pile( _ );                  \
-		pile_delete( _, pos );           \
+		pile_delete( _, type, pos );           \
 		unlock_pile( _ );                \
 		DEF_END
 
-	#define free_pile( _ )       \
+	#define delete_pile( _ )       \
 		DEF_START                  \
-		free_list( _->data );      \
-		free_list( _->data_free ); \
-		free_mem( _ );             \
+		delete_list( _->data );      \
+		delete_list( _->data_free ); \
+		delete_ptr( _ );             \
 		DEF_END
 
 //
@@ -956,10 +1015,10 @@ make_type( struct( rgba ) ) rgba;
 			out z ^ ~( ~z >> SHIFT );                                                   \
 		}                                                                             \
                                                                                   \
-		TYPE random_range_##TYPE( TYPE in_min, TYPE in_max )                          \
+		TYPE random_range_##TYPE( in TYPE in_min, in TYPE in_max )                          \
 		{                                                                             \
 			once TYPE x = 1, y = 2, z = 3;                                              \
-			out in_min + ( random_##TYPE( x++, y++, z++ ) mod( in_max - in_min + 1 ) ); \
+			out in_min + ( random_##TYPE( x++, y++, z++ ) mod ( in_max - in_min + 1 ) ); \
 		}
 
 _heptaplex_collapse( u8, 4 );
@@ -971,16 +1030,23 @@ _heptaplex_collapse( s32, 16 );
 _heptaplex_collapse( u64, 32 );
 _heptaplex_collapse( s64, 32 );
 
+#define random_s32( x, y, z ) to_s32(random_u32( x, y, z ))
+
 f32 noise_f32()
 {
-	once s32 x = 1, y = 2, z = 3;
-	out random_s32( x++, y++, z++ ) / to_f32( 0x7fffffffu );
+	once u32 x = 1, y = 2, z = 3;
+	out to_f32(random_u32( x++, y++, z++ )) / to_f32( 0xffffffffu );
 }
 
 f64 noise_f64()
 {
 	once s32 x = 1, y = 2, z = 3;
 	out random_s64( x++, y++, z++ ) / to_f64( 0x7fffffffffffffffu );
+}
+
+f32 random_range_f32( in f32 in_min, in f32 in_max )
+{
+	out in_min + ((in_max - in_min) * noise_f32() );
 }
 
 /// vectors
