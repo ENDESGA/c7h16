@@ -30,10 +30,12 @@
 		#define _CRT_SECURE_NO_WARNINGS
 		#undef UNICODE
 		#undef _UNICODE
-		#define WIN32_LEAN_AND_MEAN
+		/*#define WIN32_LEAN_AND_MEAN
 		#define VC_EXTRALEAN
-		#define NOGDICAPMASKS
+		#define NOGDICAPMASKS*/
 		#include <windows.h>
+		#undef far
+		#undef near
 	#elif defined( __LINUX__ ) || defined( linux ) || defined( __linux ) || defined( __linux__ )
 		#undef OS_LINUX
 		#define OS_LINUX 1
@@ -47,6 +49,7 @@
 		#include <pthread.h>
 		#include <X11/Xlib.h>
 		#include <X11/keysym.h>
+		#include <X11/XKBlib.h>
 		#include <X11/Xutil.h>
 
 	#elif defined( __MACOSX__ ) || defined( __APPLE__ )
@@ -57,15 +60,22 @@
 		#define OS_OTHER 1
 	#endif
 
+	#define COMPILER_MSVC 0
+	#define COMPILER_GCC 0
+	#define COMPILER_OTHER 0
+
 	#if defined( _MSC_VER )
-		#define COMPILER_MSVC
+		#undef COMPILER_MSVC
+		#define COMPILER_MSVC 1
 	#elif defined( __GNUC__ )
-		#define COMPILER_GCC
+		#undef COMPILER_GCC
+		#define COMPILER_GCC 1
 
 		#include <stdatomic.h>
 
 	#else
-		#define COMPILER_OTHER
+		#undef COMPILER_OTHER
+		#define COMPILER_OTHER 1
 	#endif
 
 	#include <stdlib.h>
@@ -205,10 +215,16 @@
 	#define min( a, b ) ( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
 	#undef max
 	#define max( a, b ) ( ( ( a ) > ( b ) ) ? ( a ) : ( b ) )
+	#undef zsign
+	#define zsign( _ ) ( ( _ ) < 0 ? -1 : ( ( _ ) > 0 ? 1 : 0 ) )
 	#undef sign
-	#define sign( _ ) ( ( _ ) < 0 ? -1 : ( ( _ ) > 0 ? 1 : 0 ) )
+	#define sign( _ ) ( ( _ ) < 0 ? -1 : 1 )
 	#undef avg
 	#define avg( a, b ) ( ( ( a ) + ( b ) ) / 2. )
+	#undef lerp
+	#define lerp( a, b, t ) (((a) * (1.-(t))) + ((b) * (t)) )
+	#undef clamp
+	#define clamp( _, MIN, MAX ) ((_) < (MIN) ? (MIN) : ((_) > (MAX) ? (MAX) : (_)))
 
 //
 
@@ -240,15 +256,24 @@
 	#define range( from_n, to_n, var ) \
 		for( register s32 var = from_n; var < to_n; var++ )
 
+#define start_scope do
+#define end_scope while( no )
+
 //
 
-	#define cast( _, TYPE ) ( val( to( ptr( TYPE ), ref( _ ) ) ) )
+	#define cast( TYPE, _ ) ( val( to( ptr( TYPE ), ref( _ ) ) ) )
 
 	// Convert 1D index to 2D (x, y) position
 	#define index_to_2d( INDEX, WIDTH ) ( ( s32[ 2 ] ){ ( INDEX ) % ( WIDTH ), ( INDEX ) / ( WIDTH ) } )
 
 	// Convert 2D (x, y) position to 1D index
 	#define index_from_2d( X, Y, WIDTH ) ( ( Y )*WIDTH + ( X ) )
+
+// Convert 1D index to 3D (x, y, z) position
+	#define index_to_3d( INDEX, WIDTH, HEIGHT ) ( ( s32[ 3 ] ){ ( INDEX ) % ( WIDTH ), ( ( INDEX ) / ( WIDTH ) ) % ( HEIGHT ), ( INDEX ) / ( ( WIDTH ) * ( HEIGHT ) ) } )
+
+	// Convert 3D (x, y, z) position to 1D index
+	#define index_from_3d( X, Y, Z, WIDTH, HEIGHT ) ( ( Z ) * ( WIDTH ) * ( HEIGHT ) + ( Y ) * ( WIDTH ) + ( X ) )
 
 	#define print( ... ) printf( __VA_ARGS__ )
 
@@ -307,7 +332,7 @@ make_type( int ) s32;
 	#define size_s32 ( size_( s32 ) )
 	#define s32_min ( -2147483648 )
 	#define s32_max ( 2147483647 )
-#define print_s32( _ ) print( #_ ": %d\n", to_s32( _ ) )
+	#define print_s32( _ ) print( #_ ": %d\n", to_s32( _ ) )
 
 make_type( long long int ) s64;
 	#define to_s64( _ ) ( to( s64, _ ) )
@@ -323,7 +348,7 @@ make_type( float ) f32;
 	#define f32_max ( 3.402823466e+38F )
 	#define f32_epsilon ( 1.1920929e-7 )
 	#define f32_step ( 1.e-6 )
-	#define print_f32( _ ) print( "%f", to_f32( _ ) )
+	#define print_f32( _ ) print( #_ ": %f\n", to_f32( _ ) )
 
 	#define trunc_f32( f ) to_f32( to_s32( f ) )
 
@@ -340,6 +365,11 @@ inl f32 round_f32( f32 f )
 inl f32 ceil_f32( f32 f )
 {
 	out( f > 0. and f != trunc_f32( f ) ) ? trunc_f32( f ) + 1. : trunc_f32( f );
+}
+
+inl f32 sqr_f32( f32 f )
+{
+	out( f * f );
 }
 
 make_type( double ) f64;
@@ -368,6 +398,11 @@ inl f64 ceil_f64( f64 f )
 	out( f > 0. and f != trunc_f64( f ) ) ? trunc_f64( f ) + 1. : trunc_f64( f );
 }
 
+inl f64 sqr_f64( f64 f )
+{
+	out( f * f );
+}
+
 //
 
 /// nano
@@ -390,18 +425,15 @@ inl u64 get_ns()
 fn sleep_ns( u64 ns )
 {
 	#ifdef _WIN32
-	HANDLE timer = CreateWaitableTimer( NULL, TRUE, NULL );
+	LARGE_INTEGER start, end, freq;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&start);
 
-	LARGE_INTEGER li;
-	li.QuadPart = -to_s64( ns / 100 );
-	if( !SetWaitableTimer( timer, &li, 0, NULL, NULL, FALSE ) )
-	{
-		CloseHandle( timer );
-		out;
+	double elapsed_ns = 0;
+	while (elapsed_ns < (double)ns) {
+		QueryPerformanceCounter(&end);
+		elapsed_ns = ((end.QuadPart - start.QuadPart) * 1e9) / freq.QuadPart;
 	}
-
-	WaitForSingleObject( timer, INFINITE );
-	CloseHandle( timer );
 	#else
 	struct timespec ts;
 	ts.tv_sec = ns / nano_per_sec;
@@ -450,17 +482,20 @@ make_type( __gnuc_va_list ) va_list;
 /// ptr
 
 	#define assign_ptr( bytes ) calloc( 1, bytes )
-	#define delete_ptr( p ) if(p != null) free( p )
+	#define delete_ptr( p ) \
+		if( p != null ) free( p )
 
 	#define new_ptr( type, n ) to( ptr( type ), calloc( n, size_( type ) ) )
 
-inl ptr( pure ) copy_ptr( ptr( pure ) dst, in ptr( pure ) src, u64 n )
+	#define copy_ptr( dst, src, n ) memcpy( dst, src, n )
+
+/*inl ptr( pure ) copy_ptr( ptr( pure ) dst, in ptr( pure ) src, u64 n )
 {
 	ptr( u8 ) d8 = dst;
 	ptr( u8 ) s8 = src;
 	as( n-- ) val( d8 )++ = val( s8 )++;
 	out dst;
-}
+}*/
 
 //
 
@@ -478,14 +513,14 @@ make_type( ptr( s8 ) ) text;
 	#define to_text( _ ) to( text, _ )
 	#define size_text ( size_( text ) )
 
-#define text_length( TEXT ) (strlen( TEXT ) + 1)
-#define copy_text( TEXT_DST, TEXT_SRC ) strcpy(TEXT_DST, TEXT_SRC)
-#define join_text( TEXT_DST, TEXT_SRC ) strcat(TEXT_DST, TEXT_SRC)
-#define end_text( TEXT ) join_text(TEXT, "\0")
-#define compare_text( TEXT_A, TEXT_B ) (strcmp(TEXT_A, TEXT_B) == 0)
+	#define text_length( TEXT ) ( strlen( TEXT ) + 1 )
+	#define copy_text( TEXT_DST, TEXT_SRC ) strcpy( TEXT_DST, TEXT_SRC )
+	#define join_text( TEXT_DST, TEXT_SRC ) strcat( TEXT_DST, TEXT_SRC )
+	#define end_text( TEXT ) join_text( TEXT, "\0" )
+	#define compare_text( TEXT_A, TEXT_B ) ( strcmp( TEXT_A, TEXT_B ) == 0 )
 
 	#define assign_text( SIZE ) new_ptr( s8, SIZE )
-	#define new_text( DEFAULT_TEXT, EXTRA_CHARS ) copy_text( assign_text( text_length( DEFAULT_TEXT ) + ( EXTRA_CHARS)), DEFAULT_TEXT )
+	#define new_text( DEFAULT_TEXT, EXTRA_CHARS ) copy_text( assign_text( text_length( DEFAULT_TEXT ) + ( EXTRA_CHARS ) ), DEFAULT_TEXT )
 	#define delete_text( _ ) \
 		if( _ != null ) delete_ptr( _ )
 	#define print_text( _ ) print( "%s", _ )
@@ -635,14 +670,14 @@ global text NL = "\n";
 		print_nl;                       \
 		DEF_END
 
-	#define print_error( IF_YES, ... )  \
-		DEF_START                         \
-		if( IF_YES )                      \
-		{                                 \
-			print( "ERROR: "); \
-			print( __VA_ARGS__ ); \
-			print_nl;                       \
-		}                                 \
+	#define print_error( IF_YES, ... ) \
+		DEF_START                        \
+		if( IF_YES )                     \
+		{                                \
+			print( "ERROR: " );            \
+			print( __VA_ARGS__ );          \
+			print_nl;                      \
+		}                                \
 		DEF_END
 
 	#define print_trace( ... )        \
@@ -654,12 +689,12 @@ global text NL = "\n";
 	//
 
 	// set
-	#ifdef COMPILER_MSVC
+	#if COMPILER_MSVC
 		#define safe_s8_ptr_set( PTR, VALUE ) _InterlockedExchange8( to( safe ptr( s8 ), PTR ), to( s8, VALUE ) )
 		#define safe_s16_ptr_set( PTR, VALUE ) _InterlockedExchange16( to( safe ptr( s16 ), PTR ), to( s16, VALUE ) )
 		#define safe_s32_ptr_set( PTR, VALUE ) _InterlockedExchange( to( safe ptr( long ), PTR ), to( long, VALUE ) )
 		#define safe_s64_ptr_set( PTR, VALUE ) _InterlockedExchange64( to( safe ptr( s64 ), PTR ), to( s64, VALUE ) )
-	#elif defined( COMPILER_GCC )
+	#elif COMPILER_GCC
 		#define safe_s8_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
 		#define safe_s16_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
 		#define safe_s32_ptr_set( PTR, VALUE ) ( atomic_exchange( ( PTR ), ( VALUE ) ) )
@@ -667,12 +702,12 @@ global text NL = "\n";
 	#endif
 
 	// get
-	#ifdef COMPILER_MSVC
+	#if COMPILER_MSVC
 		#define safe_s8_ptr_get( PTR ) _InterlockedOr8( to( safe ptr( s8 ), PTR ), 0 )
 		#define safe_s16_ptr_get( PTR ) _InterlockedOr16( to( safe ptr( s16 ), PTR ), 0 )
 		#define safe_s32_ptr_get( PTR ) _InterlockedOr( to( safe ptr( long ), PTR ), 0 )
 		#define safe_s64_ptr_get( PTR ) _InterlockedOr64( to( safe ptr( s64 ), PTR ), 0 )
-	#elif defined( COMPILER_GCC )
+	#elif COMPILER_GCC
 		#define safe_s8_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
 		#define safe_s16_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
 		#define safe_s32_ptr_get( PTR ) ( atomic_load( ( PTR ) ) )
@@ -680,12 +715,12 @@ global text NL = "\n";
 	#endif
 
 	// increment
-	#ifdef COMPILER_MSVC
+	#if COMPILER_MSVC
 		#define safe_s8_ptr_inc( PTR ) _InterlockedIncrement( to( safe ptr( s8 ), PTR ) )
 		#define safe_s16_ptr_inc( PTR ) _InterlockedIncrement16( to( safe ptr( s16 ), PTR ) )
 		#define safe_s32_ptr_inc( PTR ) _InterlockedIncrement( to( safe ptr( long ), PTR ) )
 		#define safe_s64_ptr_inc( PTR ) _InterlockedIncrement64( to( safe ptr( s64 ), PTR ) )
-	#elif defined( COMPILER_GCC )
+	#elif COMPILER_GCC
 		#define safe_s8_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
 		#define safe_s16_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
 		#define safe_s32_ptr_inc( PTR ) ( atomic_fetch_add( ( PTR ), 1 ) )
@@ -693,12 +728,12 @@ global text NL = "\n";
 	#endif
 
 	// decrement
-	#ifdef COMPILER_MSVC
+	#if COMPILER_MSVC
 		#define safe_s8_ptr_dec( PTR ) _InterlockedDecrement( to( safe ptr( s8 ), PTR ) )
 		#define safe_s16_ptr_dec( PTR ) _InterlockedDecrement16( to( safe ptr( s16 ), PTR ) )
 		#define safe_s32_ptr_dec( PTR ) _InterlockedDecrement( to( safe ptr( long ), PTR ) )
 		#define safe_s64_ptr_dec( PTR ) _InterlockedDecrement64( to( safe ptr( s64 ), PTR ) )
-	#elif defined( COMPILER_GCC )
+	#elif COMPILER_GCC
 		#define safe_s8_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
 		#define safe_s16_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
 		#define safe_s32_ptr_dec( PTR ) ( atomic_fetch_sub( ( PTR ), 1 ) )
@@ -819,7 +854,7 @@ make_struct( list )
 };
 make_ptr( struct( list ) ) list;
 
-	#define iter_list( LIST, VAR ) iter( safe_u32_get(LIST->size), VAR )
+	#define iter_list( LIST, VAR ) iter( LIST->size, VAR )
 
 inl list assign_list( in s32 in_size, in s32 in_size_ptr, in s32 in_size_type, in ptr( pure ) in_data )
 {
@@ -839,28 +874,28 @@ inl list assign_list( in s32 in_size, in s32 in_size_ptr, in s32 in_size_type, i
 	#define lock_list( LIST ) engage_spinlock( LIST->lock )
 	#define unlock_list( LIST ) vacate_spinlock( LIST->lock )
 
-	#define list_assign( LIST )                                             \
-		DEF_START                                                          \
+	#define list_assign( LIST )                                                \
+		DEF_START                                                                \
 		as( LIST->size >= LIST->size_ptr )                                       \
-		{                                                                  \
+		{                                                                        \
 			LIST->size_ptr = to_s32( LIST->size_ptr << 1 );                        \
 			ptr( pure ) new_data = assign_ptr( LIST->size_ptr * LIST->size_type ); \
-			copy_ptr( new_data, LIST->data, LIST->size * LIST->size_type );           \
-			delete_ptr( safe_ptr_get(LIST->data) );                                             \
-			safe_ptr_set(LIST->data,new_data);                                              \
-		}                                                                  \
+			copy_ptr( new_data, LIST->data, LIST->size * LIST->size_type );        \
+			delete_ptr( LIST->data );                                              \
+			LIST->data = new_data;                                                 \
+		}                                                                        \
 		DEF_END
 
-	#define list_set( LIST, type, pos, val ) ( to( ptr( type ), safe_ptr_get(LIST->data) ) )[ ( pos ) ] = ( val )
+	#define list_set( LIST, type, pos, val ) ( to( ptr( type ), LIST->data ) )[ ( pos ) ] = ( val )
 
-	#define list_add( LIST, type, val )           \
-		DEF_START                                \
-		list_assign( LIST );                        \
+	#define list_add( LIST, type, val )              \
+		DEF_START                                      \
+		list_assign( LIST );                           \
 		list_set( LIST, type, LIST->size++, ( val ) ); \
 		DEF_END
 
 	#define list_safe_add( LIST, type, val ) \
-		DEF_START                           \
+		DEF_START                              \
 		lock_list( LIST );                     \
 		list_add( LIST, type, val );           \
 		unlock_list( LIST );                   \
@@ -873,40 +908,40 @@ inl list assign_list( in s32 in_size, in s32 in_size_ptr, in s32 in_size_type, i
 		copy_ptr( to( ptr( pure ), LIST->data + ( ( ( start ) + ( n ) ) * LIST->size_type ) ), to( ptr( pure ), LIST->data + ( ( start )*LIST->size_type ) ), ( length )*LIST->size_type )
 
 	#define list_insert( LIST, type, pos, val )               \
-		DEF_START                                            \
+		DEF_START                                               \
 		list_assign( LIST );                                    \
-		list_move( LIST, ( pos ), LIST->size - ( pos ), 1 );       \
+		list_move( LIST, ( pos ), LIST->size - ( pos ), 1 );    \
 		( to( ptr( type ), LIST->data ) )[ ( pos ) ] = ( val ); \
 		++( LIST )->size;                                       \
 		DEF_END
 
-	#define list_delete( LIST, pos )                           \
-		DEF_START                                             \
+	#define list_delete( LIST, pos )                              \
+		DEF_START                                                   \
 		list_move( LIST, ( pos ) + 1, LIST->size - ( pos )-1, -1 ); \
-		--( LIST )->size;                                        \
+		--( LIST )->size;                                           \
 		DEF_END
 
-	#define list_fill( LIST, val )                  \
-		DEF_START                                  \
+	#define list_fill( LIST, val )                     \
+		DEF_START                                        \
 		iter( LIST->size, n ) LIST->data[ n ] = ( val ); \
 		DEF_END
 
-	#define delete_list( LIST )     \
-		DEF_START\
-		if(LIST == null) skip;\
-		if((LIST)->data == null) skip;\
-		delete_ptr( ( LIST )->data ); \
-		delete_ptr( LIST );\
-		DEF_END\
+	#define delete_list( LIST )          \
+		DEF_START                          \
+		if( LIST == null ) skip;           \
+		if( ( LIST )->data == null ) skip; \
+		delete_ptr( ( LIST )->data );      \
+		delete_ptr( LIST );                \
+		DEF_END
 
-	#define empty_list( LIST )     \
+	#define empty_list( LIST ) \
 		LIST->size = 0;
 
 	#define list_get( LIST, type, pos ) ( to( ptr( type ), LIST->data ) )[ ( pos ) ]
-	#define list_safe_get( LIST, type, pos ) ( to( ptr( type ), safe_ptr_get(LIST->data) ) )[ ( pos ) ]
+	#define list_safe_get( LIST, type, pos ) ( to( ptr( type ), LIST->data ) )[ ( pos ) ]
 
 	#define list_remove_front( LIST, type ) \
-		list_get( LIST, type, 0 );         \
+		list_get( LIST, type, 0 );            \
 		list_shift( LIST, -1 )
 
 	#define list_remove_back( LIST, type ) list_get( LIST, type, --( LIST->size ) )
@@ -922,7 +957,13 @@ make_struct( pile )
 struct_pile;
 make_ptr( struct( pile ) ) pile;
 
-	#define iter_pile( _, var ) iter( safe_u32_get(_->data->size), var )
+	#define iter_pile( _, var ) iter( _->data->size, var )
+
+	#define iter_pile_( PILE, TYPE )       \
+		TYPE this_##TYPE = null;             \
+		u32 TYPE##_n = 0;                    \
+		u32 PILE##_size = pile_##TYPE->size; \
+		iter( PILE->data->size, _iter_##TYPE )
 
 inl pile __new_pile( in list in_list )
 {
@@ -941,19 +982,19 @@ inl pile __new_pile( in list in_list )
 	#define lock_pile( _ ) engage_spinlock( _->lock )
 	#define unlock_pile( _ ) vacate_spinlock( _->lock )
 
-	#define pile_add( _, type, val )                       \
-		DEF_START                                            \
-		_->size++;                                           \
-		if( _->data_free->size )                             \
-		{                                                    \
+	#define pile_add( _, type, val )                         \
+		DEF_START                                              \
+		_->size++;                                             \
+		if( _->data_free->size )                               \
+		{                                                      \
 			_->prev_pos = list_remove_back( _->data_free, u32 ); \
-			list_set( _->data, type, _->prev_pos, val );       \
-		}                                                    \
-		else                                                 \
-		{                                                    \
-			_->prev_pos = _->data->size;                       \
-			list_add( _->data, type, val );                    \
-		}                                                    \
+			list_set( _->data, type, _->prev_pos, val );         \
+		}                                                      \
+		else                                                   \
+		{                                                      \
+			_->prev_pos = _->data->size;                         \
+			list_add( _->data, type, val );                      \
+		}                                                      \
 		DEF_END
 
 	#define pile_safe_add( _, type, val ) \
@@ -964,24 +1005,32 @@ inl pile __new_pile( in list in_list )
 		DEF_END
 
 	#define pile_find( _, type, pos ) list_get( _->data, type, pos )
+
+	#define pile_find_iter( PILE, TYPE )                   \
+		if( TYPE##_n >= PILE##_size ) skip;                  \
+		this_##TYPE = pile_find( PILE, TYPE, _iter_##TYPE ); \
+		if( this_##TYPE == null ) next;                      \
+		else                                                 \
+			TYPE##_n++;
+
 	#define pile_safe_find( _, type, pos ) list_safe_get( _->data, type, pos )
 
-	#define pile_delete( _, type, pos )                              \
-		DEF_START                                                \
-		_->size--;                                               \
-		list_add( _->data_free, u32, pos );                      \
-		list_set( _->data, type, pos, (type){0} ); \
+	#define pile_delete( _, type, pos )              \
+		DEF_START                                      \
+		_->size--;                                     \
+		list_add( _->data_free, u32, pos );            \
+		list_set( _->data, type, pos, ( type ){ 0 } ); \
 		DEF_END
 
 	#define pile_safe_delete( _, type, pos ) \
-		DEF_START                        \
-		lock_pile( _ );                  \
+		DEF_START                              \
+		lock_pile( _ );                        \
 		pile_delete( _, type, pos );           \
-		unlock_pile( _ );                \
+		unlock_pile( _ );                      \
 		DEF_END
 
 	#define delete_pile( _ )       \
-		DEF_START                  \
+		DEF_START                    \
 		delete_list( _->data );      \
 		delete_list( _->data_free ); \
 		delete_ptr( _ );             \
@@ -1015,10 +1064,10 @@ make_type( struct( rgba ) ) rgba;
 			out z ^ ~( ~z >> SHIFT );                                                   \
 		}                                                                             \
                                                                                   \
-		TYPE random_range_##TYPE( in TYPE in_min, in TYPE in_max )                          \
+		TYPE random_range_##TYPE( in TYPE in_min, in TYPE in_max )                    \
 		{                                                                             \
 			once TYPE x = 1, y = 2, z = 3;                                              \
-			out in_min + ( random_##TYPE( x++, y++, z++ ) mod ( in_max - in_min + 1 ) ); \
+			out in_min + ( random_##TYPE( x++, y++, z++ ) mod( in_max - in_min + 1 ) ); \
 		}
 
 _heptaplex_collapse( u8, 4 );
@@ -1030,12 +1079,12 @@ _heptaplex_collapse( s32, 16 );
 _heptaplex_collapse( u64, 32 );
 _heptaplex_collapse( s64, 32 );
 
-#define random_s32( x, y, z ) to_s32(random_u32( x, y, z ))
+	#define random_s32( x, y, z ) to_s32( random_u32( x, y, z ) )
 
 f32 noise_f32()
 {
 	once u32 x = 1, y = 2, z = 3;
-	out to_f32(random_u32( x++, y++, z++ )) / to_f32( 0xffffffffu );
+	out to_f32( random_u32( x++, y++, z++ ) ) / to_f32( 0xffffffffu );
 }
 
 f64 noise_f64()
@@ -1046,10 +1095,12 @@ f64 noise_f64()
 
 f32 random_range_f32( in f32 in_min, in f32 in_max )
 {
-	out in_min + ((in_max - in_min) * noise_f32() );
+	out in_min + ( ( in_max - in_min ) * noise_f32() );
 }
 
 /// vectors
+
+	#define _vec_functions_2( TYPE )
 
 // float
 
@@ -1071,6 +1122,94 @@ make_struct( fvec2 )
 	#define size_struct_fvec2 ( size_( struct( fvec2 ) ) )
 	#define create_struct_fvec2( x, y ) create( struct( fvec2 ), x, y )
 
+inl struct( fvec2 ) fvec2_neg( in struct( fvec2 ) in_v )
+{
+	out create_struct_fvec2( -in_v.x, -in_v.y );
+}
+
+inl struct( fvec2 ) fvec2_add( in struct( fvec2 ) in_a, in struct( fvec2 ) in_b )
+{
+	out create_struct_fvec2( in_a.x + in_b.x, in_a.y + in_b.y );
+}
+inl struct( fvec2 ) fvec2_add_f32( in struct( fvec2 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec2( in_a.x + in_b, in_a.y + in_b );
+}
+
+inl struct( fvec2 ) fvec2_sub( in struct( fvec2 ) in_a, in struct( fvec2 ) in_b )
+{
+	out create_struct_fvec2( in_a.x - in_b.x, in_a.y - in_b.y );
+}
+inl struct( fvec2 ) fvec2_sub_f32( in struct( fvec2 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec2( in_a.x - in_b, in_a.y - in_b );
+}
+
+inl struct( fvec2 ) fvec2_mul( in struct( fvec2 ) in_a, in struct( fvec2 ) in_b )
+{
+	out create_struct_fvec2( in_a.x * in_b.x, in_a.y * in_b.y );
+}
+inl struct( fvec2 ) fvec2_mul_f32( in struct( fvec2 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec2( in_a.x * in_b, in_a.y * in_b );
+}
+
+inl struct( fvec2 ) fvec2_div( in struct( fvec2 ) in_a, in struct( fvec2 ) in_b )
+{
+	out create_struct_fvec2( in_a.x / in_b.x, in_a.y / in_b.y );
+}
+inl struct( fvec2 ) fvec2_div_f32( in struct( fvec2 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec2( in_a.x / in_b, in_a.y / in_b );
+}
+
+inl struct( fvec2 ) fvec2_sqr( in struct( fvec2 ) in_v )
+{
+	out create_struct_fvec2( in_v.x * in_v.x, in_v.y * in_v.y );
+}
+
+inl struct( fvec2 ) fvec2_sqrt( in struct( fvec2 ) in_v )
+{
+	out create_struct_fvec2( sqrtf( in_v.x ), sqrtf( in_v.y ) );
+}
+
+inl f32 fvec2_dot( in struct( fvec2 ) a, in struct( fvec2 ) b )
+{
+	out( a.x * b.x ) + ( a.y * b.y );
+}
+
+inl f32 fvec2_dot2( in struct( fvec2 ) v )
+{
+	out fvec2_dot( v, v );
+}
+
+inl f32 fvec2_len( in struct( fvec2 ) v )
+{
+	out sqrtf( fvec2_dot2( v ) );
+}
+
+inl f32 fvec2_dis( in struct( fvec2 ) a, in struct( fvec2 ) b )
+{
+	out fvec2_len( create_struct_fvec2( a.x - b.x, a.y - b.y ) );
+}
+
+inl f32 fvec2_rad( in struct( fvec2 ) a, in struct( fvec2 ) b )
+{
+	out atan2f( b.y - a.y, b.x - a.x );
+}
+
+inl struct( fvec2 ) fvec2_norm( in struct( fvec2 ) v )
+{
+	out fvec2_div_f32( v, fvec2_len( v ) );
+}
+
+inl struct( fvec2 ) fvec2_lerp( in struct( fvec2 ) in_a, in struct( fvec2 ) in_b, in f32 m )
+{
+	out create_struct_fvec2( ( in_a.x * ( 1. - m ) ) + ( in_b.x * m ), ( in_a.y * ( 1. - m ) ) + ( in_b.y * m ) );
+}
+
+//
+
 make_struct( fvec3 )
 {
 	make_union()
@@ -1088,6 +1227,78 @@ make_struct( fvec3 )
 	#define to_struct_fvec3( _ ) ( to( struct( fvec3 ), _ ) )
 	#define size_struct_fvec3 ( size_( struct( fvec3 ) ) )
 	#define create_struct_fvec3( x, y, z ) create( struct( fvec3 ), x, y, z )
+
+inl struct( fvec3 ) fvec3_neg( in struct( fvec3 ) in_v )
+{
+	out create_struct_fvec3( -in_v.x, -in_v.y, -in_v.z );
+}
+
+inl struct( fvec3 ) fvec3_add( in struct( fvec3 ) in_a, in struct( fvec3 ) in_b )
+{
+	out create_struct_fvec3( in_a.x + in_b.x, in_a.y + in_b.y, in_a.z + in_b.z );
+}
+inl struct( fvec3 ) fvec3_add_f32( in struct( fvec3 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec3( in_a.x + in_b, in_a.y + in_b, in_a.z + in_b );
+}
+
+inl struct( fvec3 ) fvec3_sub( in struct( fvec3 ) in_a, in struct( fvec3 ) in_b )
+{
+	out create_struct_fvec3( in_a.x - in_b.x, in_a.y - in_b.y, in_a.z - in_b.z );
+}
+inl struct( fvec3 ) fvec3_sub_f32( in struct( fvec3 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec3( in_a.x - in_b, in_a.y - in_b, in_a.z - in_b );
+}
+
+inl struct( fvec3 ) fvec3_mul( in struct( fvec3 ) in_a, in struct( fvec3 ) in_b )
+{
+	out create_struct_fvec3( in_a.x * in_b.x, in_a.y * in_b.y, in_a.z * in_b.z );
+}
+inl struct( fvec3 ) fvec3_mul_f32( in struct( fvec3 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec3( in_a.x * in_b, in_a.y * in_b, in_a.z * in_b );
+}
+
+inl struct( fvec3 ) fvec3_div( in struct( fvec3 ) in_a, in struct( fvec3 ) in_b )
+{
+	out create_struct_fvec3( in_a.x / in_b.x, in_a.y / in_b.y, in_a.z / in_b.z );
+}
+inl struct( fvec3 ) fvec3_div_f32( in struct( fvec3 ) in_a, in f32 in_b )
+{
+	out create_struct_fvec3( in_a.x / in_b, in_a.y / in_b, in_a.z / in_b );
+}
+
+inl f32 fvec3_dot( in struct( fvec3 ) a, in struct( fvec3 ) b )
+{
+	out( a.x * b.x ) + ( a.y * b.y ) + ( a.z * b.z );
+}
+
+inl f32 fvec3_dot2( in struct( fvec3 ) v )
+{
+	out fvec3_dot( v, v );
+}
+
+inl struct( fvec3 ) fvec3_cross( in struct( fvec3 ) a, in struct( fvec3 ) b )
+{
+	out create_struct_fvec3(
+		( a.y * b.z ) - ( a.z * b.y ),
+		( a.z * b.x ) - ( a.x * b.z ),
+		( a.x * b.y ) - ( a.y * b.x )
+	);
+}
+
+inl f32 fvec3_len( in struct( fvec3 ) v )
+{
+	out sqrtf( fvec3_dot2( v ) );
+}
+
+inl struct( fvec3 ) fvec3_norm( in struct( fvec3 ) v )
+{
+	out fvec3_div_f32( v, fvec3_len( v ) );
+}
+
+//
 
 make_struct( fvec4 )
 {
@@ -1134,6 +1345,47 @@ make_struct( svec3 )
 	#define to_struct_svec3( _ ) ( to( struct( svec3 ), _ ) )
 	#define size_struct_svec3 ( size_( struct( svec3 ) ) )
 	#define create_struct_svec3( x, y, z ) create( struct( svec3 ), x, y, z )
+
+inl struct( svec3 ) svec3_neg( in struct( svec3 ) in_v )
+{
+	out create_struct_svec3( -in_v.x, -in_v.y, -in_v.z );
+}
+
+inl struct( svec3 ) svec3_add( in struct( svec3 ) in_a, in struct( svec3 ) in_b )
+{
+	out create_struct_svec3( in_a.x + in_b.x, in_a.y + in_b.y, in_a.z + in_b.z );
+}
+inl struct( svec3 ) svec3_add_s32( in struct( svec3 ) in_a, in s32 in_b )
+{
+	out create_struct_svec3( in_a.x + in_b, in_a.y + in_b, in_a.z + in_b );
+}
+
+inl struct( svec3 ) svec3_sub( in struct( svec3 ) in_a, in struct( svec3 ) in_b )
+{
+	out create_struct_svec3( in_a.x - in_b.x, in_a.y - in_b.y, in_a.z - in_b.z );
+}
+inl struct( svec3 ) svec3_sub_s32( in struct( svec3 ) in_a, in s32 in_b )
+{
+	out create_struct_svec3( in_a.x - in_b, in_a.y - in_b, in_a.z - in_b );
+}
+
+inl struct( svec3 ) svec3_mul( in struct( svec3 ) in_a, in struct( svec3 ) in_b )
+{
+	out create_struct_svec3( in_a.x * in_b.x, in_a.y * in_b.y, in_a.z * in_b.z );
+}
+inl struct( svec3 ) svec3_mul_s32( in struct( svec3 ) in_a, in s32 in_b )
+{
+	out create_struct_svec3( in_a.x * in_b, in_a.y * in_b, in_a.z * in_b );
+}
+
+inl struct( svec3 ) svec3_div( in struct( svec3 ) in_a, in struct( svec3 ) in_b )
+{
+	out create_struct_svec3( in_a.x / in_b.x, in_a.y / in_b.y, in_a.z / in_b.z );
+}
+inl struct( svec3 ) svec3_div_s32( in struct( svec3 ) in_a, in s32 in_b )
+{
+	out create_struct_svec3( in_a.x / in_b, in_a.y / in_b, in_a.z / in_b );
+}
 
 make_struct( svec4 )
 {
@@ -1189,6 +1441,192 @@ make_struct( uvec4 )
 	#define to_struct_uvec4( _ ) ( to( struct( uvec4 ), _ ) )
 	#define size_struct_uvec4 ( size_( struct( uvec4 ) ) )
 	#define create_struct_uvec4( x, y, z, w ) create( struct( uvec4 ), x, y, z, w )
+
+//
+
+make_struct( quat )
+{
+	f32 a;
+	struct( fvec3 ) v;
+};
+	#define create_struct_quat( a, v ) create( struct( quat ), a, v )
+
+inl struct( quat ) new_quat( in f32 angle, in struct( fvec3 ) axis )
+{
+	out create_struct_quat( cosf( angle / 2.f ), fvec3_mul_f32( fvec3_norm( axis ), sinf( angle / 2.f ) ) );
+}
+
+inl struct( quat ) quat_mul( in struct( quat ) a, in struct( quat ) b )
+{
+	out create_struct_quat(
+		( a.a * b.a ) - fvec3_dot( a.v, b.v ),
+		fvec3_add(
+			fvec3_add(
+				fvec3_mul_f32( b.v, a.a ),
+				fvec3_mul_f32( a.v, b.a )
+			),
+			fvec3_cross( a.v, b.v )
+		)
+	);
+}
+
+inl struct( quat ) quat_mul_f32( in struct( quat ) a, in f32 b )
+{
+	out create_struct_quat( a.a * b, fvec3_mul_f32( a.v, b ) );
+}
+
+inl struct( quat ) new_quat_look( in f32 pitch_x, in f32 roll_y, in f32 yaw_z )
+{
+	out quat_mul( new_quat( pitch_x, create_struct_fvec3( 1, 0, 0 ) ), quat_mul( new_quat( roll_y, create_struct_fvec3( 0, 1, 0 ) ), new_quat( yaw_z, create_struct_fvec3( 0, 0, 1 ) ) ) );
+}
+
+inl struct( quat ) quat_conj( in struct( quat ) q )
+{
+	out create_struct_quat( q.a, fvec3_neg( q.v ) );
+}
+
+inl struct( fvec3 ) fvec3_rot( in struct( fvec3 ) v, in struct( quat ) q )
+{
+	out quat_mul( quat_mul( q, create_struct_quat( 0, v ) ), quat_conj( q ) ).v;
+}
+
+inl struct( fvec3 ) quat_get_forward( in struct( quat ) q )
+{
+	out fvec3_norm( fvec3_rot( create_struct_fvec3( 0, 0, -1 ), quat_conj( q ) ) );
+}
+
+inl struct( fvec3 ) quat_get_right( in struct( quat ) q )
+{
+	out fvec3_norm( fvec3_rot( create_struct_fvec3( 1, 0, 0 ), quat_conj( q ) ) );
+}
+
+inl struct( fvec3 ) quat_get_up( in struct( quat ) q )
+{
+	out fvec3_norm( fvec3_rot( create_struct_fvec3( 0, 1, 0 ), quat_conj( q ) ) );
+}
+
+//
+
+make_struct( dual_quat )
+{
+	struct( quat ) r;
+	struct( quat ) d;
+};
+	#define create_struct_dual_quat( r, d ) create( struct( dual_quat ), r, d )
+
+inl struct( dual_quat ) new_dual_quat( in struct( quat ) dir, in struct( fvec3 ) pos )
+{
+	out create_struct_dual_quat( dir, quat_mul_f32( quat_mul( create_struct_quat( 0, pos ), dir ), .5 ) );
+}
+
+//
+
+make_struct( dual_quat_proj )
+{
+	struct( dual_quat ) dq;
+	struct( fvec4 ) p;
+};
+	#define create_struct_dual_quat_proj( dq, p ) create( struct( dual_quat_proj ), dq, p )
+
+inl struct( dual_quat_proj ) new_dual_quat_proj( in struct( quat ) dir, in struct( fvec3 ) pos, f32 fov, f32 aspect, f32 near, f32 far )
+{
+	f32 f, d;
+	f = 1.0f / tanf( fov * 0.5f );
+	d = 1.0f / ( near - far );
+
+	out create_struct_dual_quat_proj(
+		new_dual_quat( dir, pos ),
+		// create_struct_fvec4( f / aspect, f, ( near + far ) * d, near )
+		create_struct_fvec4( f / aspect, f, ( near + far ) * d, 2.0f * near * far * d )
+	);
+}
+
+/// noise
+
+const struct( fvec3 ) _grad_dirs[ 16 ] = {
+	{ 1,	 1,	0},
+	{-1,	1,	 0},
+	{ 1, -1,	 0},
+	{-1, -1,	0},
+	{ 1,	 0,	1},
+	{-1,	0,	 1},
+	{ 1,	 0, -1},
+	{-1,	0, -1},
+	{ 0,	 1,	1},
+	{ 0, -1,	 1},
+	{ 0,	 1, -1},
+	{ 0, -1, -1},
+	{ 1,	 1,	0},
+	{-1,	1,	 0},
+	{ 1, -1,	 0},
+	{-1, -1,	0}
+};
+
+struct( fvec3 ) grad_dir( u32 h )
+{
+	return _grad_dirs[ h & 15 ];
+}
+
+float mix( float a, float b, float t )
+{
+	return a * ( 1.0f - t ) + b * t;
+}
+
+float interp( float v1, float v2, float v3, float v4, float v5, float v6, float v7, float v8, struct( fvec3 ) t )
+{
+	return mix(
+		mix( mix( v1, v2, t.x ), mix( v3, v4, t.x ), t.y ),
+		mix( mix( v5, v6, t.x ), mix( v7, v8, t.x ), t.y ),
+		t.z
+	);
+}
+
+struct( fvec3 ) fade( struct( fvec3 ) t )
+{
+	return ( struct( fvec3 ) ){
+		t.x * t.x * t.x * ( t.x * ( t.x * 6.0f - 15.0f ) + 10.0f ),
+		t.y * t.y * t.y * ( t.y * ( t.y * 6.0f - 15.0f ) + 10.0f ),
+		t.z * t.z * t.z * ( t.z * ( t.z * 6.0f - 15.0f ) + 10.0f ) };
+}
+
+float dot( struct( fvec3 ) a, struct( fvec3 ) b )
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+float noise( struct( fvec3 ) p )
+{
+	struct( fvec3 ) fl_p = { floor( p.x ), floor( p.y ), floor( p.z ) };
+	struct( fvec3 ) fr_p = { p.x - fl_p.x, p.y - fl_p.y, p.z - fl_p.z };
+	struct( uvec3 ) c = { ( u32 )fl_p.x, ( u32 )fl_p.y, ( u32 )fl_p.z };
+
+	return interp(
+		dot( grad_dir( random_u32( c.x, c.y, c.z ) ), fr_p ),
+		dot( grad_dir( random_u32( c.x + 1, c.y, c.z ) ), create_struct_fvec3( fr_p.x - 1, fr_p.y, fr_p.z ) ),
+		dot( grad_dir( random_u32( c.x, c.y + 1, c.z ) ), create_struct_fvec3( fr_p.x, fr_p.y - 1, fr_p.z ) ),
+		dot( grad_dir( random_u32( c.x + 1, c.y + 1, c.z ) ), create_struct_fvec3( fr_p.x - 1, fr_p.y - 1, fr_p.z ) ),
+		dot( grad_dir( random_u32( c.x, c.y, c.z + 1 ) ), create_struct_fvec3( fr_p.x, fr_p.y, fr_p.z - 1 ) ),
+		dot( grad_dir( random_u32( c.x + 1, c.y, c.z + 1 ) ), create_struct_fvec3( fr_p.x - 1, fr_p.y, fr_p.z - 1 ) ),
+		dot( grad_dir( random_u32( c.x, c.y + 1, c.z + 1 ) ), create_struct_fvec3( fr_p.x, fr_p.y - 1, fr_p.z - 1 ) ),
+		dot( grad_dir( random_u32( c.x + 1, c.y + 1, c.z + 1 ) ), create_struct_fvec3( fr_p.x - 1, fr_p.y - 1, fr_p.z - 1 ) ),
+		fade( fr_p )
+	);
+}
+
+float perlin( struct( fvec3 ) p, int freq, int octa, float pers, float lacu )
+{
+	float v = 0.0f, a = 1.0f, c_f = ( float )freq;
+	for( int i = 0; i < octa; i++ )
+	{
+		v += noise( p ) * a;
+		a *= pers;
+		c_f *= lacu;
+		p.x *= lacu;
+		p.y *= lacu;
+		p.z *= lacu;
+	}
+	return v;
+}
 
 //
 
